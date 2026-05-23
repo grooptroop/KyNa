@@ -1,0 +1,10 @@
+- name: Установка k3s платформы
+  hosts: k3s_server
+  roles: 
+    - k3s_platform
+
+- name: Установка сети и LB 
+  hosts: k3s_server
+  roles: 
+    - networking_lb
+    

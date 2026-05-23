@@ -1,0 +1,35 @@
+- name: Установка необходимых пакетов
+  become: yes 
+  apt: 
+    name: 
+      - python3-pip
+      - python3-kubernetes
+      - curl
+      - ca-certificates 
+    update_cache: yes 
+    state: present
+
+- name: Установка k3s установочного скрипта
+  get_url: 
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: '0755'
+
+- name: Установка k3s сервера 
+  become: yes 
+  command: 
+    argv:
+    - /tmp/k3s-install.sh
+    - server 
+    - --write-kubeconfig-mode
+    - "644"
+    - --disable                           # отключаем встроенный ingress и loadbalancer
+    - traefik 
+    - --disable
+    - servicelb 
+  environment: 
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+  args: 
+    creates: /usr/local/bin/k3s 
+
+    

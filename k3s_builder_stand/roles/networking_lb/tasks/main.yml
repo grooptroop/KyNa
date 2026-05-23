@@ -1,0 +1,76 @@
+- name: Установка MetalLB 
+  k8s: 
+    state: present
+    src: "{{ metallb_version_manifest }}"
+    kubeconfig: "{{ k3s_kubeconfig }}"
+
+
+- name: Ожидание создания пространства имён metallb
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: "{{ metallb_namespace }}"
+    kubeconfig: "{{ k3s_kubeconfig }}"
+  register: metallb_ns
+  until: metallb_ns.resources | length > 0
+  retries: 30
+  delay: 2
+
+- name: Ожидание создания MetalLB компонентов
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ metallb_namespace }}"
+    name: controller
+    kubeconfig: "{{ k3s_kubeconfig }}"
+  register: metallb_controller
+  until:
+    - metallb_controller.resources | length > 0
+    - metallb_controller.resources[0].status.readyReplicas | default(0) | int > 0
+  retries: 60
+  delay: 5
+
+- name: Настройка пула адресов
+  template: 
+    src: metallb-pool.yml.j2
+    dest: /tmp/metallb-pool.yml 
+    mode: "0644"
+
+- name: Применение настроек пула 
+  k8s: 
+    state: present
+    src: /tmp/metallb-pool.yml 
+    kubeconfig: "{{ k3s_kubeconfig }}"
+
+
+- name: создание nginx namespace
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ nginx_namespace }}"
+    kubeconfig: "{{ k3s_kubeconfig }}"
+
+
+- name: Установка nginx-ingress 
+  k8s: 
+    state: present
+    src: "{{ nginx_manifest }}"
+    kubeconfig: "{{ k3s_kubeconfig }}"    
+    namespace: "{{ nginx_namespace }}"
+
+- name: Ожидание поднятия ingress 
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ nginx_namespace }}"
+    name: ingress-nginx-controller
+    kubeconfig: "{{ k3s_kubeconfig }}"
+  register: nginx_controller
+  until:
+    - nginx_controller.resources | length > 0
+    - nginx_controller.resources[0].status.readyReplicas | default(0) | int > 0
+  retries: 60
+  delay: 5
