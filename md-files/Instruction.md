@@ -56,3 +56,10 @@ cd k3s_builder_stand
 ansible-playbook playbooks/main.yml
 ```
 
+проверяем есть ли namespace и поды 
+
+```
+kubectl get namespaces
+
+kubectl get pods -n (имя namespace)
+```

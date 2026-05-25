@@ -1,0 +1,24 @@
+{{ define "users.tmpl" }}
+<!DOCTYPE html>
+<html>
+<head><title>Users</title></head>
+<body>
+  <h1>Users</h1>
+  <a href="/users/new">Create user</a>
+  <table border="1">
+    <tr>
+      <th>ID</th><th>Username</th><th>Domain</th><th>Mode</th><th>Status</th>
+    </tr>
+    {{ range .Users }}
+    <tr>
+      <td>{{ .ID }}</td>
+      <td>{{ .Username }}</td>
+      <td>{{ .Domain }}</td>
+      <td>{{ .Mode }}</td>
+      <td>{{ .Status }}</td>
+    </tr>
+    {{ end }}
+  </table>
+</body>
+</html>
+{{ end }}

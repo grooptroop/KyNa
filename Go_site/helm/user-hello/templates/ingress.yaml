@@ -1,0 +1,22 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: 
+  name: hello-{{ .Values.username }}
+  nmaespace: {{ .Values.username }}
+  annotations:
+    kubernetes.io/ingress.class: {{ .Values.ingress.className | default "nginx" }}
+spec: 
+  ingressClassName: {{ .Values.ingress.className | default "nginx" }}
+  rules: 
+    - host: {{ .Values.domain }}
+      http: 
+        paths: 
+          - path: /
+            pathType: Prefix
+            backend: 
+              service: 
+                name: hello-{{ .Values.username }}
+                port: 
+                  number: 80
+{{- end}} 

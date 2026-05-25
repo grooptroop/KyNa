@@ -1,0 +1,32 @@
+apiVersion: apps/v1 
+kind: Deployment 
+metadata: 
+  name: hello-{{ .Values.username }}
+  namespace: {{ .Values.username }}
+  labels: 
+    app: hello-{{ .Values.username }}
+
+spec: 
+  replicas: 1
+  selector:
+    matchLabels: 
+      app: hello-{{ .Values.username }}
+  template:
+    metadata:
+      labels: 
+        app: hello-{{ .Values.username }}
+    spec: 
+      containers:
+        - name: hello
+          image: {{ .Values.image | default "nginx:stable-alpine" }}
+          ports: 
+            - containerPort: 80
+          resources:
+            requests: 
+              cpu: {{ .Values.resources.request.cpu | default "50m" }}
+              memory: {{ .Values.resources.request.memory | default "64Mi" }}
+            limits: 
+              cpu: {{ .Values.resources.limits.cpu | default "200m" }}
+              memory: {{ .Values.resources.limits.memory | default "128Mi" }} 
+
+                           
