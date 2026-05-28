@@ -1,13 +1,12 @@
-{{ define "user_new.tmpl" }}
+{{ define "login.tmpl" }}
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Create user</title>
+  <title>Login</title>
   <style>
     :root {
       --bg-main: #0b0b0d;
       --bg-card: #141416;
-      --bg-row-alt: #191b1f;
       --border-color: #26282f;
       --accent: #52e36a;
       --accent-soft: #3ac458;
@@ -23,38 +22,30 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background-color: var(--bg-main);
       color: var(--text-main);
-    }
-
-    h1 {
-      margin: 0;
-      font-size: 24px;
-    }
-
-    .page-header {
       display: flex;
-      justify-content: space-between;
+      justify-content: center;
       align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .page-header-title {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .page-subtitle {
-      font-size: 12px;
-      color: var(--text-muted);
+      min-height: 100vh;
     }
 
     .card {
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: 10px;
-      padding: 16px 20px;
+      padding: 20px 24px;
       box-shadow: 0 6px 12px rgba(0,0,0,0.35);
-      max-width: 480px;
+      width: 320px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
     }
 
     label {
@@ -70,7 +61,7 @@
       font-size: 12px;
     }
 
-    input, select {
+    input {
       width: 100%;
       padding: 6px 8px;
       border-radius: 4px;
@@ -81,83 +72,63 @@
       outline: none;
     }
 
-    input:focus, select:focus {
+    input:focus {
       border-color: var(--accent);
     }
 
     .form-actions {
       margin-top: 16px;
       display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 12px;
     }
 
     .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
       padding: 6px 14px;
       font-size: 13px;
       border-radius: 4px;
       border: none;
       cursor: pointer;
-      text-decoration: none;
-      transition: background-color 0.15s ease, transform 0.05s ease;
-    }
-
-    .btn-primary {
       background-color: var(--accent);
       color: #000;
       font-weight: 600;
     }
 
-    .btn-primary:hover {
+    .btn:hover {
       background-color: var(--accent-soft);
     }
 
-    .btn-secondary-link {
-      font-size: 13px;
+    .link {
+      font-size: 12px;
       color: var(--text-muted);
       text-decoration: none;
     }
 
-    .btn-secondary-link:hover {
+    .link:hover {
       color: var(--accent);
       text-decoration: underline;
     }
   </style>
 </head>
 <body>
-  <div class="page-header">
-    <div class="page-header-title">
-      <h1>Create user</h1>
-      <span class="page-subtitle">Provision new namespace &amp; service in k3s</span>
-    </div>
-  </div>
-
   <div class="card">
-    <form method="post" action="/admin/users">
+    <h1>Login</h1>
+    <div class="subtitle">Sign in to your account</div>
+
+    <form method="post" action="/auth/login">
       <label>
         <span>Username</span>
         <input type="text" name="username" required>
       </label>
 
       <label>
-        <span>Domain</span>
-        <input type="text" name="domain" value="example.local" required>
-      </label>
-
-      <label>
-        <span>Mode</span>
-        <select name="mode">
-          <option value="app">app</option>
-          <option value="os">os</option>
-        </select>
+        <span>Password</span>
+        <input type="password" name="password" required>
       </label>
 
       <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Create</button>
-        <a href="/admin/users" class="btn-secondary-link">Back to list</a>
+        <button type="submit" class="btn">Sign in</button>
+        <a class="link" href="/auth/register">Create account</a>
       </div>
     </form>
   </div>

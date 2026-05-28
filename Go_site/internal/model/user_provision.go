@@ -20,3 +20,13 @@ type UserProvision struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
+
+type AdminUserView struct {
+	Username   string
+	Email      string
+	Role       Role
+	Domain     *string
+	Mode       *string
+	Status     *ProvisionStatus
+	ExternalIP *string
+}

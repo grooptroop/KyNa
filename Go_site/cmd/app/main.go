@@ -33,14 +33,28 @@ func main() {
 		log.Fatalf("failed to run migrations: %v", err)
 	}
 
+	// репозитории
 	userRepo := repository.NewUserRepository(pool)
-	userSvc := service.NewUserService(userRepo, cfg.HelmChartDir)
-	userHandler := handlers.NewUserHandler(userSvc)
+	machineRepo := repository.NewMachineRepository(pool)
+	accountRepo := repository.NewAccountRepository(pool)
 
+	// сервисы
+	userSvc := service.NewUserService(userRepo, cfg.HelmChartDir)
+	machineSvc := service.NewMachineService(machineRepo, userRepo, cfg.HelmChartDir)
+
+	sessions := service.NewSessionStore()
+	authSvc := service.NewAuthService(accountRepo, sessions, userSvc)
+
+	// хендлеры
+	userHandler := handlers.NewUserHandler(userSvc)
+	machineHandler := handlers.NewMachineHandler(machineSvc)
+	authHandler := handlers.NewAuthHandler(authSvc)
+
+	// router
 	r := gin.Default()
 	r.LoadHTMLGlob("web/templates/*.tmpl")
 
-	routes.Register(r, userHandler)
+	routes.Register(r, userHandler, machineHandler, authHandler, sessions)
 
 	log.Printf("starting HTTP server on %s", cfg.HttpAddr)
 	if err := r.Run(cfg.HttpAddr); err != nil {

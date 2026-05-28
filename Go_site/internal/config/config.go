@@ -8,8 +8,15 @@ import (
 type Config struct {
 	HttpAddr      string
 	PostgresDSN   string
-	K3sKubeconfig string // уже не используем, но можно оставить на будущее
+	K3sKubeconfig string
 	HelmChartDir  string
+}
+
+func getenv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
 }
 
 func Load() Config {
@@ -19,17 +26,12 @@ func Load() Config {
 		K3sKubeconfig: getenv("K3S_KUBECONFIG", "/etc/rancher/k3s/k3s.yaml"),
 		HelmChartDir:  getenv("HELM_CHART_DIR", "./helm/user-hello"),
 	}
+
 	if cfg.K3sKubeconfig != "" {
 		if err := os.Setenv("KUBECONFIG", cfg.K3sKubeconfig); err != nil {
 			log.Printf("failed to set KUBECONFIG: %v", err)
 		}
 	}
-	return cfg
-}
 
-func getenv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
+	return cfg
 }

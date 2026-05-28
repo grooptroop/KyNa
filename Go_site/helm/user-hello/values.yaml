@@ -1,11 +1,11 @@
-username: "user1"
-
-domain: "user1.example.local"
+username: ""
+name: ""
+domain: ""
 
 mode: "app"
 
 metallb:
-  addressPool: 192.168.1.200-192.168.1.250
+  addressPool: "192.168.1.200-192.168.1.250"
 
 image: "nginx:stable-alpine"
 
@@ -13,11 +13,10 @@ resources:
   request:
     cpu: "50m"
     memory: "64Mi"
-  limits: 
+  limits:
     cpu: "200m"
     memory: "128Mi"
 
-ingress: 
-  enabled: false 
-  className: "nginx" 
-
+ingress:
+  enabled: false
+  className: "nginx"

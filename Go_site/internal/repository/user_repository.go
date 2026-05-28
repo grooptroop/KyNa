@@ -54,9 +54,9 @@ func (r *UserRepository) List(ctx context.Context) ([]model.UserProvision, error
 
 func (r *UserRepository) Create(ctx context.Context, u *model.UserProvision) error {
 	return r.pool.QueryRow(ctx, `
-		INSERT INTO user_provisions (username, domain, mode, status, external_ip)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, created_at, updated_at`,
+        INSERT INTO user_provisions (username, domain, mode, status, external_ip)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, created_at, updated_at`,
 		u.Username, u.Domain, u.Mode, u.Status, u.ExternalIP,
 	).Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
 }
@@ -79,4 +79,47 @@ func (r *UserRepository) UpdateStatusAndIP(
 		username, status, externalIP,
 	)
 	return err
+}
+
+func (r *UserRepository) ListAdminUsers(ctx context.Context) ([]model.AdminUserView, error) {
+	rows, err := r.pool.Query(ctx, `
+        SELECT
+            a.username,
+            a.email,
+            a.role,
+            up.domain,
+            up.mode,
+            up.status,
+            up.external_ip
+        FROM accounts a
+        LEFT JOIN user_provisions up ON up.username = a.username
+        ORDER BY a.id DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list admin users query: %w", err)
+	}
+	defer rows.Close()
+
+	var res []model.AdminUserView
+
+	for rows.Next() {
+		var u model.AdminUserView
+		if err := rows.Scan(
+			&u.Username,
+			&u.Email,
+			&u.Role,
+			&u.Domain,
+			&u.Mode,
+			&u.Status,
+			&u.ExternalIP,
+		); err != nil {
+			return nil, fmt.Errorf("scan admin user row: %w", err)
+		}
+		res = append(res, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("admin users rows err: %w", err)
+	}
+
+	return res, nil
 }

@@ -1,13 +1,12 @@
-{{ define "user_new.tmpl" }}
+{{ define "machine_new.tmpl" }}
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Create user</title>
+  <title>New machine</title>
   <style>
     :root {
       --bg-main: #0b0b0d;
       --bg-card: #141416;
-      --bg-row-alt: #191b1f;
       --border-color: #26282f;
       --accent: #52e36a;
       --accent-soft: #3ac458;
@@ -130,21 +129,16 @@
 <body>
   <div class="page-header">
     <div class="page-header-title">
-      <h1>Create user</h1>
-      <span class="page-subtitle">Provision new namespace &amp; service in k3s</span>
+      <h1>New machine</h1>
+      <span class="page-subtitle">Create a service in your namespace</span>
     </div>
   </div>
 
   <div class="card">
-    <form method="post" action="/admin/users">
+    <form method="post" action="/me/machines">
       <label>
-        <span>Username</span>
-        <input type="text" name="username" required>
-      </label>
-
-      <label>
-        <span>Domain</span>
-        <input type="text" name="domain" value="example.local" required>
+        <span>Machine name</span>
+        <input type="text" name="name" placeholder="my-app" required>
       </label>
 
       <label>
@@ -157,7 +151,7 @@
 
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Create</button>
-        <a href="/admin/users" class="btn-secondary-link">Back to list</a>
+        <a href="/me/machines" class="btn-secondary-link">Back to list</a>
       </div>
     </form>
   </div>

@@ -17,7 +17,7 @@ func NewUserHandler(svc *service.UserService) *UserHandler {
 }
 
 func (h *UserHandler) ListUsers(c *gin.Context) {
-	users, err := h.svc.ListUsers(c.Request.Context())
+	users, err := h.svc.ListAdminUsers(c.Request.Context())
 	if err != nil {
 		log.Printf("FAILED TO LIST USERS: %v", err)
 		c.String(http.StatusInternalServerError, "failed to list users")

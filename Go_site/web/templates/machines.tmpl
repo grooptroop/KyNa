@@ -1,8 +1,8 @@
-{{ define "users.tmpl" }}
+{{ define "machines.tmpl" }}
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Users</title>
+  <title>My machines</title>
   <style>
     :root {
       --bg-main: #0b0b0d;
@@ -85,9 +85,8 @@
       background-color: #202228;
     }
 
-    .col-id { width: 50px; }
-    .col-actions { width: 120px; }
     .col-ip { width: 120px; }
+    .col-actions { width: 120px; }
 
     .tag {
       font-size: 11px;
@@ -148,6 +147,7 @@
       color: var(--text-muted);
     }
 
+    /* Базовая кнопка */
     .btn {
       display: inline-flex;
       align-items: center;
@@ -161,27 +161,38 @@
       transition: background-color 0.15s ease, transform 0.05s ease;
     }
 
+    /* Зелёная кнопка "New machine" */
     .btn-primary {
       background-color: var(--accent);
       color: #000;
       font-weight: 600;
+      border-radius: 999px; /* делаем её пилюлей */
     }
 
     .btn-primary:hover {
       background-color: var(--accent-soft);
     }
 
+    /* Округлая кнопка удаления */
     .btn-danger {
-      background-color: var(--status-red);
+      background-color: #dc3545;
+      border-radius: 999px;
+      border: 1px solid #dc3545;
       color: #fff;
+      padding: 3px 10px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 600;
     }
 
     .btn-danger:hover {
-      background-color: #c0392b;
+      background-color: #e55361;
     }
 
-    .btn:active {
-      transform: translateY(1px);
+    .btn-sm {
+      padding: 2px 8px;
+      font-size: 11px;
     }
 
     a {
@@ -197,69 +208,58 @@
 <body>
   <div class="page-header">
     <div class="page-header-title">
-      <h1>Users</h1>
-      <span class="page-subtitle">Namespaces &amp; hello-world services in k3s</span>
+      <h1>My machines</h1>
+      <span class="page-subtitle">Services in your namespace</span>
     </div>
-    <a class="btn btn-primary" href="/admin/users/new">Create user</a>
+    <a class="btn btn-primary" href="/me/machines/new">New machine</a>
   </div>
 
   <div class="card">
-  <table>
-    <thead>
+    <table>
       <tr>
-        <th>Username</th>
-        <th>Email</th>
-        <th>Role</th>
-        <th>Domain</th>
+        <th>Name</th>
         <th>Mode</th>
         <th>Status</th>
-        <th>External IP</th>
-        <th>Actions</th>
+        <th class="col-ip">External IP</th>
+        <th class="col-actions">Actions</th>
       </tr>
-    </thead>
-    <tbody>
-      {{ range .Users }}
+      {{ range .Machines }}
       <tr>
-        <td>{{ .Username }}</td>
-        <td>{{ .Email }}</td>
-        <td>{{ .Role }}</td>
+        <td>{{ .Name }}</td>
+        <td><span class="tag">{{ .Mode }}</span></td>
         <td>
-          {{ if .Domain }}
-            {{ .Domain }}
+          {{ if eq .Status "ready" }}
+          <span class="status status-ready">
+            <span class="status-dot"></span> ready
+          </span>
+          {{ else if eq .Status "failed" }}
+          <span class="status status-failed">
+            <span class="status-dot"></span> failed
+          </span>
           {{ else }}
-            <span style="color:#888;">no provision</span>
-          {{ end }}
-        </td>
-        <td>
-          {{ if .Mode }}
-            {{ .Mode }}
-          {{ else }}
-            <span style="color:#888;">-</span>
-          {{ end }}
-        </td>
-        <td>
-          {{ if .Status }}
-            {{ .Status }}
-          {{ else }}
-            <span style="color:#888;">-</span>
+          <span class="status status-pending">
+            <span class="status-dot"></span> pending
+          </span>
           {{ end }}
         </td>
         <td>
           {{ if .ExternalIP }}
-            {{ .ExternalIP }}
+            <span class="ip-pill">{{ .ExternalIP }}</span>
           {{ else }}
-            <span style="color:#888;">-</span>
+            <span class="ip-pill-muted">waiting...</span>
           {{ end }}
         </td>
         <td>
-          <form action="/admin/users/{{ .Username }}/delete" method="post" style="display:inline;">
-            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+          <form action="/me/machines/{{.ID}}/delete" method="post" style="display:inline;">
+            <button type="submit" class="btn btn-danger btn-sm">
+              Delete
+            </button>
           </form>
         </td>
       </tr>
       {{ end }}
-    </tbody>
-  </table>
+    </table>
+  </div>
 </body>
 </html>
 {{ end }}
