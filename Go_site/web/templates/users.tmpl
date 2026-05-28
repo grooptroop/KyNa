@@ -1,24 +1,260 @@
 {{ define "users.tmpl" }}
 <!DOCTYPE html>
 <html>
-<head><title>Users</title></head>
+<head>
+  <title>Users</title>
+  <style>
+    :root {
+      --bg-main: #0b0b0d;
+      --bg-card: #141416;
+      --bg-row-alt: #191b1f;
+      --border-color: #26282f;
+      --accent: #52e36a;       /* неоново-зелёный, как на Kick */
+      --accent-soft: #3ac458;
+      --text-main: #f5f5f7;
+      --text-muted: #a0a3ad;
+      --status-green: #2ecc71;
+      --status-yellow: #f1c40f;
+      --status-red: #e74c3c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .page-header-title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .page-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.35);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      text-align: left;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    tr:nth-child(even) td {
+      background-color: var(--bg-row-alt);
+    }
+
+    tr:hover td {
+      background-color: #202228;
+    }
+
+    .col-id { width: 50px; }
+    .col-actions { width: 120px; }
+    .col-ip { width: 160px; }
+
+    .tag {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 600;
+      border: 1px solid transparent;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: currentColor;
+    }
+
+    .status-ready {
+      color: var(--status-green);
+      background-color: rgba(46, 204, 113, 0.12);
+      border-color: rgba(46, 204, 113, 0.35);
+    }
+
+    .status-pending {
+      color: var(--status-yellow);
+      background-color: rgba(241, 196, 15, 0.12);
+      border-color: rgba(241, 196, 15, 0.40);
+    }
+
+    .status-failed {
+      color: var(--status-red);
+      background-color: rgba(231, 76, 60, 0.12);
+      border-color: rgba(231, 76, 60, 0.45);
+    }
+
+    .ip-pill {
+      font-size: 12px;
+      background-color: #1c1e23;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+    }
+
+    .ip-pill-muted {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 10px;
+      font-size: 12px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background-color 0.15s ease, transform 0.05s ease;
+    }
+
+    .btn-primary {
+      background-color: var(--accent);
+      color: #000;
+      font-weight: 600;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--accent-soft);
+    }
+
+    .btn-danger {
+      background-color: var(--status-red);
+      color: #fff;
+    }
+
+    .btn-danger:hover {
+      background-color: #c0392b;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
 <body>
-  <h1>Users</h1>
-  <a href="/users/new">Create user</a>
-  <table border="1">
-    <tr>
-      <th>ID</th><th>Username</th><th>Domain</th><th>Mode</th><th>Status</th>
-    </tr>
-    {{ range .Users }}
-    <tr>
-      <td>{{ .ID }}</td>
-      <td>{{ .Username }}</td>
-      <td>{{ .Domain }}</td>
-      <td>{{ .Mode }}</td>
-      <td>{{ .Status }}</td>
-    </tr>
-    {{ end }}
-  </table>
+  <div class="page-header">
+    <div class="page-header-title">
+      <h1>Users</h1>
+      <span class="page-subtitle">Namespaces &amp; hello-world services in k3s</span>
+    </div>
+    <a class="btn btn-primary" href="/users/new">Create user</a>
+  </div>
+
+  <div class="card">
+    <table>
+      <tr>
+        <th class="col-id">ID</th>
+        <th>Username</th>
+        <th>Domain</th>
+        <th>Mode</th>
+        <th>Status</th>
+        <th class="col-ip">External IP</th>
+        <th class="col-actions">Actions</th>
+      </tr>
+      {{ range .Users }}
+      <tr>
+        <td>{{ .ID }}</td>
+        <td>{{ .Username }}</td>
+        <td>{{ .Domain }}</td>
+        <td><span class="tag">{{ .Mode }}</span></td>
+        <td>
+          {{ if eq .Status "ready" }}
+          <span class="status status-ready">
+            <span class="status-dot"></span> ready
+          </span>
+          {{ else if eq .Status "failed" }}
+          <span class="status status-failed">
+            <span class="status-dot"></span> failed
+          </span>
+          {{ else }}
+          <span class="status status-pending">
+            <span class="status-dot"></span> pending
+          </span>
+          {{ end }}
+        </td>
+        <td>
+        <td>
+          {{ if .ExternalIP }}
+            <span class="ip-pill">{{ .ExternalIP }}</span>
+          {{ else }}
+            <span class="ip-pill-muted">waiting...</span>
+          {{ end }}
+        </td>
+        <td>
+          <form method="post" action="/users/{{ .Username }}/delete" style="display:inline;">
+            <button type="submit" class="btn btn-danger"
+                    onclick="return confirm('Delete user {{ .Username }} and its namespace?');">
+              Delete
+            </button>
+          </form>
+        </td>
+      </tr>
+      {{ end }}
+    </table>
+  </div>
 </body>
 </html>
 {{ end }}

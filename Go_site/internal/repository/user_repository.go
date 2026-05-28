@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/grooptroop/KyNa/Go_site/internal/model"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,34 +18,65 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) List(ctx context.Context) ([]model.UserProvision, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, username, domain, mode, status, created_at, updated_at
+        SELECT id, username, domain, mode, status, external_ip, created_at, updated_at
         FROM user_provisions
         ORDER BY id DESC`,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list users query: %w", err)
 	}
 	defer rows.Close()
 
-	var result []model.UserProvision
+	var users []model.UserProvision
 	for rows.Next() {
 		var u model.UserProvision
 		if err := rows.Scan(
-			&u.ID, &u.Username, &u.Domain, &u.Mode, &u.Status,
-			&u.CreatedAt, &u.UpdatedAt,
+			&u.ID,
+			&u.Username,
+			&u.Domain,
+			&u.Mode,
+			&u.Status,
+			&u.ExternalIP,
+			&u.CreatedAt,
+			&u.UpdatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan user row: %w", err)
 		}
-		result = append(result, u)
+		users = append(users, u)
 	}
-	return result, rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows err: %w", err)
+	}
+
+	return users, nil
 }
 
 func (r *UserRepository) Create(ctx context.Context, u *model.UserProvision) error {
 	return r.pool.QueryRow(ctx, `
-        INSERT INTO user_provisions (username, domain, mode, status)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, created_at, updated_at`,
-		u.Username, u.Domain, u.Mode, u.Status,
+		INSERT INTO user_provisions (username, domain, mode, status, external_ip)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, created_at, updated_at`,
+		u.Username, u.Domain, u.Mode, u.Status, u.ExternalIP,
 	).Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
+}
+
+func (r *UserRepository) DeleteByUsername(ctx context.Context, username string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM user_provisions WHERE username = $1`, username)
+	return err
+}
+
+func (r *UserRepository) UpdateStatusAndIP(
+	ctx context.Context,
+	username string,
+	status model.ProvisionStatus,
+	externalIP *string,
+) error {
+	_, err := r.pool.Exec(ctx, `
+        UPDATE user_provisions
+        SET status = $2, external_ip = $3, updated_at = now()
+        WHERE username = $1`,
+		username, status, externalIP,
+	)
+	return err
 }

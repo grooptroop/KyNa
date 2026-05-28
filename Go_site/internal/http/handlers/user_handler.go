@@ -19,9 +19,11 @@ func NewUserHandler(svc *service.UserService) *UserHandler {
 func (h *UserHandler) ListUsers(c *gin.Context) {
 	users, err := h.svc.ListUsers(c.Request.Context())
 	if err != nil {
+		log.Printf("FAILED TO LIST USERS: %v", err)
 		c.String(http.StatusInternalServerError, "failed to list users")
 		return
 	}
+
 	c.HTML(http.StatusOK, "users.tmpl", gin.H{
 		"Users": users,
 	})
@@ -58,6 +60,22 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	}
 
 	log.Printf("user created: %+v", u)
+
+	c.Redirect(http.StatusSeeOther, "/users")
+}
+
+func (h *UserHandler) DeleteUser(c *gin.Context) {
+	username := c.Param("username")
+	if username == "" {
+		c.String(http.StatusBadRequest, "username required")
+		return
+	}
+
+	if err := h.svc.DeleteUser(c.Request.Context(), username); err != nil {
+		log.Printf("failed to delete user %s: %v", username, err)
+		c.String(http.StatusInternalServerError, "failed to delete user")
+		return
+	}
 
 	c.Redirect(http.StatusSeeOther, "/users")
 }

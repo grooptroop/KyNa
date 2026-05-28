@@ -3,8 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
 	"os/exec"
+	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/grooptroop/KyNa/Go_site/internal/model"
 	"github.com/grooptroop/KyNa/Go_site/internal/repository"
 )
@@ -25,6 +29,27 @@ func (s *UserService) ListUsers(ctx context.Context) ([]model.UserProvision, err
 	return s.repo.List(ctx)
 }
 
+type UserHandler struct {
+	svc *UserService
+}
+
+func NewUserHandler(svc *UserService) *UserHandler {
+	return &UserHandler{svc: svc}
+}
+
+func (h *UserHandler) ListUsers(c *gin.Context) {
+	users, err := h.svc.ListUsers(c.Request.Context())
+	if err != nil {
+		log.Printf("FAILED TO LIST USERS: %v", err)
+		c.String(http.StatusInternalServerError, "failed to list users")
+		return
+	}
+
+	c.HTML(http.StatusOK, "users.tmpl", gin.H{
+		"Users": users,
+	})
+}
+
 type CreateUserInput struct {
 	Username string
 	Domain   string
@@ -42,16 +67,12 @@ func (s *UserService) CreateUser(ctx context.Context, in CreateUserInput) (*mode
 		return nil, err
 	}
 
-	// Если каталог чарта не задан — пропускаем развёртывание
 	if s.helmChartDir == "" {
 		return u, nil
 	}
 
-	// Имя релиза, например user-admin
 	releaseName := fmt.Sprintf("user-%s", u.Username)
 
-	// Команда helm install:
-	// helm install user-<username> <chartDir> --set username=...,domain=...
 	cmd := exec.CommandContext(
 		ctx,
 		"helm",
@@ -62,12 +83,72 @@ func (s *UserService) CreateUser(ctx context.Context, in CreateUserInput) (*mode
 		"--set", fmt.Sprintf("domain=%s", u.Domain),
 	)
 
-	// Важно: helm должен видеть kubeconfig, см. ниже
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// на практике лучше логировать out, а не терять
 		return u, fmt.Errorf("helm install failed: %v, output: %s", err, string(out))
+	}
+	svcName := fmt.Sprintf("hello-%s", u.Username)
+	ns := u.Username
+
+	ipCmd := exec.CommandContext(
+		ctx,
+		"kubectl",
+		"get",
+		"svc",
+		svcName,
+		"-n", ns,
+		"-o", "jsonpath={.status.loadBalancer.ingress[0].ip}",
+	)
+	ipOut, ipErr := ipCmd.CombinedOutput()
+	externalIP := strings.TrimSpace(string(ipOut))
+	if ipErr != nil {
+		log.Printf("kubectl get svc external ip failed: %v, output: %s", ipErr, string(ipOut))
+	}
+
+	if externalIP != "" {
+		u.ExternalIP = &externalIP
+		u.Status = model.StatusReady
+		if err := s.repo.UpdateStatusAndIP(ctx, u.Username, u.Status, u.ExternalIP); err != nil {
+			log.Printf("failed to update status/ip in db: %v", err)
+		}
 	}
 
 	return u, nil
+}
+
+func (s *UserService) DeleteUser(ctx context.Context, username string) error {
+	if err := s.repo.DeleteByUsername(ctx, username); err != nil {
+		return err
+	}
+
+	releaseName := fmt.Sprintf("user-%s", username)
+
+	cmd := exec.CommandContext(
+		ctx,
+		"helm",
+		"uninstall",
+		releaseName,
+	)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("helm uninstall failed: %v, output: %s", err, string(out))
+
+	}
+
+	nsCmd := exec.CommandContext(
+		ctx,
+		"kubectl",
+		"delete",
+		"namespace",
+		username,
+		"--ignore-not-found=true",
+	)
+
+	nsOut, nsErr := nsCmd.CombinedOutput()
+	if nsErr != nil {
+		log.Printf("kubectl delete namespace failed: %v, output: %s", nsErr, string(nsOut))
+	}
+
+	return nil
 }

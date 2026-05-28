@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS user_provisions (
     domain      TEXT NOT NULL,
     mode        TEXT NOT NULL,
     status      TEXT NOT NULL DEFAULT 'pending',
+    external_ip TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
