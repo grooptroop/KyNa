@@ -37,6 +37,8 @@ func Register(
 		admin.GET("/users/new", userHandler.ShowCreateForm)
 		admin.POST("/users", userHandler.CreateUser)
 		admin.POST("/users/:username/delete", userHandler.DeleteUser)
+		admin.GET("/users/:username/machines", machineHandler.AdminUserMachines)
+		admin.POST("/users/:username/machines/:id/delete", machineHandler.AdminDeleteMachine)
 	}
 
 	me := r.Group("/me")
@@ -46,5 +48,6 @@ func Register(
 		me.GET("/machines/new", machineHandler.ShowCreateForm)
 		me.POST("/machines", machineHandler.CreateMachine)
 		me.POST("/machines/:id/delete", machineHandler.DeleteMachine)
+
 	}
 }

@@ -119,3 +119,56 @@ func (h *MachineHandler) DeleteMachine(c *gin.Context) {
 
 	c.Redirect(http.StatusSeeOther, "/me/machines")
 }
+
+func (h *MachineHandler) AdminUserMachines(c *gin.Context) {
+	username := c.Param("username")
+	if username == "" {
+		c.String(http.StatusBadRequest, "username required")
+		return
+	}
+
+	machines, err := h.svc.ListMachines(c.Request.Context(), username)
+	if err != nil {
+		log.Printf("FAILED TO LIST MACHINES FOR USER %s: %v", username, err)
+		c.String(http.StatusInternalServerError, "failed to list machines")
+		return
+	}
+
+	data := struct {
+		Username string
+		Machines []model.UserMachine
+	}{
+		Username: username,
+		Machines: machines,
+	}
+
+	c.HTML(http.StatusOK, "admin_user_machines.tmpl", data)
+}
+
+func (h *MachineHandler) AdminDeleteMachine(c *gin.Context) {
+	username := c.Param("username")
+	if username == "" {
+		c.String(http.StatusBadRequest, "username required")
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	in := service.DeleteMachineInput{
+		ID:       id,
+		Username: username,
+	}
+
+	if err := h.svc.DeleteMachine(c.Request.Context(), in); err != nil {
+		log.Printf("ADMIN DELETE MACHINE ERROR: %v", err)
+		c.String(http.StatusInternalServerError, "failed to delete machine")
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/admin/users/"+username+"/machines")
+}
