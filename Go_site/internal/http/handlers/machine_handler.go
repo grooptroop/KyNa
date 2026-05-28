@@ -56,7 +56,6 @@ func (h *MachineHandler) ShowCreateForm(c *gin.Context) {
 	c.HTML(http.StatusOK, "machine_new.tmpl", nil)
 }
 
-// POST /me/machines
 func (h *MachineHandler) CreateMachine(c *gin.Context) {
 	username := middleware.CurrentUsername(c)
 	if username == "" {
@@ -69,16 +68,35 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		return
 	}
 
+	serviceKind := c.PostForm("service_kind")
 	name := c.PostForm("name")
 	mode := c.PostForm("mode")
+	version := c.PostForm("version")
+
+	// базовая валидация
+	if serviceKind == "" {
+		c.String(http.StatusBadRequest, "service type is required (choose a card)")
+		return
+	}
+	if name == "" {
+		c.String(http.StatusBadRequest, "name is required")
+		return
+	}
 	if mode == "" {
 		mode = "app"
 	}
 
+	log.Printf(
+		"CREATE MACHINE: user=%s service=%s name=%s mode=%s version=%s",
+		username, serviceKind, name, mode, version,
+	)
+
 	in := service.CreateMachineInput{
-		Username: username,
-		Name:     name,
-		Mode:     mode,
+		Username:    username,
+		Name:        name,
+		Mode:        mode,
+		ServiceKind: serviceKind,
+		Version:     version,
 	}
 
 	_, err := h.svc.CreateMachine(c.Request.Context(), in)

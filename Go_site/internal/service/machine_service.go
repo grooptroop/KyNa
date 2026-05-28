@@ -26,9 +26,11 @@ func NewMachineService(mRepo *repository.MachineRepository, uRepo *repository.Us
 }
 
 type CreateMachineInput struct {
-	Username string
-	Name     string
-	Mode     string
+	Username    string
+	Name        string
+	Mode        string
+	ServiceKind string
+	Version     string
 }
 
 func (s *MachineService) ListMachines(ctx context.Context, username string) ([]model.UserMachine, error) {

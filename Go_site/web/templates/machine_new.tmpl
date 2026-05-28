@@ -7,11 +7,13 @@
     :root {
       --bg-main: #0b0b0d;
       --bg-card: #141416;
+      --bg-row-alt: #191b1f;
       --border-color: #26282f;
       --accent: #52e36a;
       --accent-soft: #3ac458;
       --text-main: #f5f5f7;
       --text-muted: #a0a3ad;
+      --status-green: #2ecc71;
     }
 
     * { box-sizing: border-box; }
@@ -51,44 +53,107 @@
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: 10px;
-      padding: 16px 20px;
+      padding: 16px;
       box-shadow: 0 6px 12px rgba(0,0,0,0.35);
-      max-width: 480px;
     }
 
-    label {
-      display: block;
-      margin-bottom: 10px;
-      font-size: 13px;
+    .service-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
     }
 
-    label span {
-      display: block;
-      margin-bottom: 4px;
-      color: var(--text-muted);
-      font-size: 12px;
-    }
-
-    input, select {
-      width: 100%;
-      padding: 6px 8px;
-      border-radius: 4px;
-      border: 1px solid var(--border-color);
+    .service-card {
       background-color: #191b1f;
-      color: var(--text-main);
-      font-size: 13px;
-      outline: none;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: border-color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease, background-color 0.15s ease;
     }
 
-    input:focus, select:focus {
+    .service-card:hover {
       border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(82, 227, 106, 0.25);
+      background-color: #1f2025;
     }
 
-    .form-actions {
-      margin-top: 16px;
+    .service-card.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(82, 227, 106, 0.4);
+      background-color: #1c2320;
+    }
+
+    .service-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #3ac458);
       display: flex;
       align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: #000;
+      font-weight: 700;
+    }
+
+    .service-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .service-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .service-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .form-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .form-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .form-input, .form-select {
+      background-color: #191b1f;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 6px 8px;
+      color: var(--text-main);
+      font-size: 13px;
+    }
+
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: var(--accent);
     }
 
     .btn {
@@ -96,8 +161,8 @@
       align-items: center;
       justify-content: center;
       padding: 6px 14px;
-      font-size: 13px;
-      border-radius: 4px;
+      font-size: 12px;
+      border-radius: 999px;
       border: none;
       cursor: pointer;
       text-decoration: none;
@@ -114,15 +179,25 @@
       background-color: var(--accent-soft);
     }
 
-    .btn-secondary-link {
-      font-size: 13px;
+    .btn-muted {
+      background-color: transparent;
       color: var(--text-muted);
-      text-decoration: none;
+      border: 1px solid var(--border-color);
     }
 
-    .btn-secondary-link:hover {
-      color: var(--accent);
-      text-decoration: underline;
+    .btn-muted:hover {
+      background-color: #1c1e23;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .hint {
+      font-size: 11px;
+      color: var(--text-muted);
     }
   </style>
 </head>
@@ -130,31 +205,106 @@
   <div class="page-header">
     <div class="page-header-title">
       <h1>New machine</h1>
-      <span class="page-subtitle">Create a service in your namespace</span>
+      <span class="page-subtitle">Choose a service type and configure its parameters</span>
     </div>
+    <a href="/me/machines" class="btn btn-muted">← Back</a>
   </div>
 
   <div class="card">
-    <form method="post" action="/me/machines">
-      <label>
-        <span>Machine name</span>
-        <input type="text" name="name" placeholder="my-app" required>
-      </label>
+    <!-- Сетка сервисов -->
+    <div class="service-grid" id="service-grid">
+      <div class="service-card" data-service="web-app" data-default-name="web" data-default-mode="app">
+        <div class="service-icon">W</div>
+        <div class="service-title">Web application</div>
+        <div class="service-desc">Nginx-based HTTP service, suitable for simple web apps.</div>
+        <div class="service-meta">image: nginx:stable-alpine</div>
+      </div>
 
-      <label>
-        <span>Mode</span>
-        <select name="mode">
-          <option value="app">app</option>
-          <option value="os">os</option>
-        </select>
-      </label>
+      <div class="service-card" data-service="api" data-default-name="api" data-default-mode="app">
+        <div class="service-icon">A</div>
+        <div class="service-title">API service</div>
+        <div class="service-desc">Backend API service, can be customized with your image later.</div>
+        <div class="service-meta">image: your-registry/api:latest</div>
+      </div>
 
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Create</button>
-        <a href="/me/machines" class="btn-secondary-link">Back to list</a>
+      <div class="service-card" data-service="worker" data-default-name="worker" data-default-mode="worker">
+        <div class="service-icon">W</div>
+        <div class="service-title">Background worker</div>
+        <div class="service-desc">Non-HTTP background job or worker process.</div>
+        <div class="service-meta">mode: worker</div>
+      </div>
+    </div>
+
+    <!-- Форма конфигурации -->
+    <form method="post" action="/me/machines" id="machine-form">
+      <div class="form-section">
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label">Selected service</label>
+            <input type="text" class="form-input" id="service-kind-display" value="" placeholder="Choose a service above" disabled>
+            <input type="hidden" name="service_kind" id="service-kind">
+          </div>
+
+          <div class="form-field">
+            <label class="form-label">Machine name</label>
+            <input type="text" name="name" class="form-input" id="machine-name" placeholder="e.g. my-app" required>
+            <span class="hint">Will be used in resource name: hello-&lt;username&gt;-&lt;name&gt;</span>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label">Mode</label>
+            <select name="mode" class="form-select" id="machine-mode">
+              <option value="app">app</option>
+              <option value="worker">worker</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label class="form-label">Version (optional)</label>
+            <input type="text" name="version" class="form-input" id="machine-version" placeholder="e.g. 1.0.0 or image tag">
+            <span class="hint">We can later map this to Helm values (image tag, chart version, etc.).</span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <a href="/me/machines" class="btn btn-muted">Cancel</a>
+          <button type="submit" class="btn btn-primary">Create machine</button>
+        </div>
       </div>
     </form>
   </div>
+
+  <script>
+    (function() {
+      const cards = document.querySelectorAll('.service-card');
+      const serviceKindInput = document.getElementById('service-kind');
+      const serviceKindDisplay = document.getElementById('service-kind-display');
+      const nameInput = document.getElementById('machine-name');
+      const modeSelect = document.getElementById('machine-mode');
+
+      cards.forEach(card => {
+        card.addEventListener('click', () => {
+          // снять выделение со всех
+          cards.forEach(c => c.classList.remove('selected'));
+
+          // выделить текущую
+          card.classList.add('selected');
+
+          const kind = card.getAttribute('data-service');
+          const defaultName = card.getAttribute('data-default-name') || "";
+          const defaultMode = card.getAttribute('data-default-mode') || "app";
+
+          serviceKindInput.value = kind;
+          serviceKindDisplay.value = card.querySelector('.service-title').textContent;
+
+          if (!nameInput.value) {
+            nameInput.value = defaultName;
+          }
+          modeSelect.value = defaultMode;
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
 {{ end }}
