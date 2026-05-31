@@ -11,12 +11,14 @@ const (
 )
 
 type UserMachine struct {
-	ID         int64
-	Username   string
-	Name       string
-	Mode       string
-	Status     MachineStatus
-	ExternalIP *string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID              int64
+	Username        string
+	Name            string
+	Mode            string
+	ServiceKind     string
+	Status          MachineStatus
+	ExternalIP      *string
+	ResourcesPreset string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }

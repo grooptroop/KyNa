@@ -19,7 +19,6 @@ func NewMachineHandler(svc *service.MachineService) *MachineHandler {
 	return &MachineHandler{svc: svc}
 }
 
-// GET /me/machines
 func (h *MachineHandler) ListMachines(c *gin.Context) {
 	username := middleware.CurrentUsername(c)
 	if username == "" {
@@ -45,7 +44,6 @@ func (h *MachineHandler) ListMachines(c *gin.Context) {
 	c.HTML(http.StatusOK, "machines.tmpl", data)
 }
 
-// GET /me/machines/new
 func (h *MachineHandler) ShowCreateForm(c *gin.Context) {
 	username := middleware.CurrentUsername(c)
 	if username == "" {
@@ -70,10 +68,10 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 
 	serviceKind := c.PostForm("service_kind")
 	name := c.PostForm("name")
-	mode := c.PostForm("mode")
 	version := c.PostForm("version")
+	resourcesPreset := c.PostForm("resources_preset")
+	image := c.PostForm("image")
 
-	// базовая валидация
 	if serviceKind == "" {
 		c.String(http.StatusBadRequest, "service type is required (choose a card)")
 		return
@@ -82,21 +80,23 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		c.String(http.StatusBadRequest, "name is required")
 		return
 	}
-	if mode == "" {
-		mode = "app"
+
+	if resourcesPreset == "" {
+		resourcesPreset = "small"
 	}
 
 	log.Printf(
-		"CREATE MACHINE: user=%s service=%s name=%s mode=%s version=%s",
-		username, serviceKind, name, mode, version,
+		"CREATE MACHINE: user=%s service=%s name=%s version=%s resources=%s image=%s",
+		username, serviceKind, name, version, resourcesPreset, image,
 	)
 
 	in := service.CreateMachineInput{
-		Username:    username,
-		Name:        name,
-		Mode:        mode,
-		ServiceKind: serviceKind,
-		Version:     version,
+		Username:        username,
+		Name:            name,
+		ServiceKind:     serviceKind,
+		Version:         version,
+		ResourcesPreset: resourcesPreset,
+		Image:           image,
 	}
 
 	_, err := h.svc.CreateMachine(c.Request.Context(), in)

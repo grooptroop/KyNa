@@ -26,11 +26,19 @@ func NewMachineService(mRepo *repository.MachineRepository, uRepo *repository.Us
 }
 
 type CreateMachineInput struct {
-	Username    string
-	Name        string
-	Mode        string
-	ServiceKind string
-	Version     string
+	Username        string
+	Name            string
+	Mode            string
+	ServiceKind     string
+	Version         string
+	ResourcesPreset string
+	Image           string
+}
+
+type DeleteMachineInput struct {
+	ID       int64
+	Username string
+	Name     string
 }
 
 func (s *MachineService) ListMachines(ctx context.Context, username string) ([]model.UserMachine, error) {
@@ -38,8 +46,10 @@ func (s *MachineService) ListMachines(ctx context.Context, username string) ([]m
 }
 
 func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInput) (*model.UserMachine, error) {
-	log.Printf("DEBUG: MachineService.CreateMachine start username=%q name=%q mode=%q",
-		in.Username, in.Name, in.Mode)
+	log.Printf(
+		"DEBUG: MachineService.CreateMachine start username=%q name=%q mode=%q serviceKind=%q version=%q resourcesPreset=%q",
+		in.Username, in.Name, in.Mode, in.ServiceKind, in.Version, in.ResourcesPreset,
+	)
 
 	if in.Username == "" {
 		return nil, fmt.Errorf("MachineService.CreateMachine: empty username")
@@ -47,38 +57,108 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 	if in.Name == "" {
 		return nil, fmt.Errorf("MachineService.CreateMachine: empty name")
 	}
-	if in.Mode == "" {
-		in.Mode = "app"
+
+	serviceKind := in.ServiceKind
+	if serviceKind == "" {
+		serviceKind = "web"
+	}
+
+	mode := "app"
+	if serviceKind == "worker" {
+		mode = "worker"
+	}
+
+	resources := in.ResourcesPreset
+	if resources == "" {
+		resources = "small"
 	}
 
 	m := &model.UserMachine{
-		Username: in.Username,
-		Name:     in.Name,
-		Mode:     in.Mode,
-		Status:   model.MachineStatusPending,
+		Username:        in.Username,
+		Name:            in.Name,
+		Mode:            mode,
+		ServiceKind:     serviceKind,
+		Status:          model.MachineStatusPending,
+		ResourcesPreset: resources,
+		// Version:      in.Version, // если добавишь в модель
 	}
 
-	// 1. сначала пишем в БД
 	if err := s.repo.Create(ctx, m); err != nil {
 		log.Printf("CREATE MACHINE DB ERROR: %v", err)
 		return nil, err
 	}
 
-	log.Printf("DEBUG: Machine saved to DB id=%d username=%s name=%s",
-		m.ID, m.Username, m.Name)
+	log.Printf("DEBUG: Machine saved to DB id=%d username=%s name=%s serviceKind=%s resources=%s",
+		m.ID, m.Username, m.Name, m.ServiceKind, m.ResourcesPreset)
 
-	// 2. если Helm выключен — выходим
 	if s.helmChartDir == "" {
 		return m, nil
 	}
 
-	// 3. деплой Helm
+	svcEnabled := true
+	svcType := "LoadBalancer"
+	svcPort := 80
+	containerPort := 80
+	ingressEnabled := false
+
+	switch serviceKind {
+	case "web":
+		svcEnabled = true
+		svcType = "LoadBalancer"
+		svcPort = containerPort
+		ingressEnabled = false
+	case "api":
+		svcEnabled = true
+		svcType = "ClusterIP"
+		svcPort = containerPort
+		ingressEnabled = false
+	case "worker":
+		svcEnabled = false
+		ingressEnabled = false
+	}
+
+	cpuReq := "50m"
+	memReq := "64Mi"
+	cpuLimit := "200m"
+	memLimit := "128Mi"
+
+	switch resources {
+	case "medium":
+		cpuReq = "100m"
+		memReq = "128Mi"
+		cpuLimit = "300m"
+		memLimit = "256Mi"
+	case "large":
+		cpuReq = "250m"
+		memReq = "256Mi"
+		cpuLimit = "500m"
+		memLimit = "512Mi"
+	}
+
+	imgRepo := "nginx"
+	imgTag := "stable-alpine"
+
+	if in.Image != "" {
+		parts := strings.Split(in.Image, ":")
+		if len(parts) == 2 {
+			imgRepo = parts[0]
+			imgTag = parts[1]
+		} else {
+			imgRepo = in.Image
+			if in.Version != "" {
+				imgTag = in.Version
+			}
+		}
+	} else {
+		if in.Version != "" {
+			imgTag = in.Version
+		}
+	}
+
 	releaseName := fmt.Sprintf("machine-%s-%s", m.Username, m.Name)
 	ns := m.Username
 
-	cmd := exec.CommandContext(
-		ctx,
-		"helm",
+	args := []string{
 		"install",
 		releaseName,
 		s.helmChartDir,
@@ -86,16 +166,28 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		"--set", fmt.Sprintf("username=%s", m.Username),
 		"--set", fmt.Sprintf("name=%s", m.Name),
 		"--set", fmt.Sprintf("mode=%s", m.Mode),
-	)
+		"--set", fmt.Sprintf("serviceKind=%s", serviceKind),
+		"--set", fmt.Sprintf("image.repository=%s", imgRepo),
+		"--set", fmt.Sprintf("image.tag=%s", imgTag),
+		"--set", fmt.Sprintf("containerPort=%d", containerPort),
+		"--set", fmt.Sprintf("service.enabled=%t", svcEnabled),
+		"--set", fmt.Sprintf("service.type=%s", svcType),
+		"--set", fmt.Sprintf("service.port=%d", svcPort),
+		"--set", fmt.Sprintf("ingress.enabled=%t", ingressEnabled),
+		"--set", fmt.Sprintf("resources.request.cpu=%s", cpuReq),
+		"--set", fmt.Sprintf("resources.request.memory=%s", memReq),
+		"--set", fmt.Sprintf("resources.limits.cpu=%s", cpuLimit),
+		"--set", fmt.Sprintf("resources.limits.memory=%s", memLimit),
+	}
+
+	cmd := exec.CommandContext(ctx, "helm", args...)
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("helm install for machine failed: %v, output: %s", err, string(out))
-		// не падаем, БД уже обновлена
 		return m, nil
 	}
 
-	// 4. получаем external IP
 	svcName := fmt.Sprintf("hello-%s-%s", m.Username, m.Name)
 
 	ipCmd := exec.CommandContext(
@@ -107,6 +199,7 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		"-n", ns,
 		"-o", "jsonpath={.status.loadBalancer.ingress[0].ip}",
 	)
+
 	ipOut, ipErr := ipCmd.CombinedOutput()
 	externalIP := strings.TrimSpace(string(ipOut))
 	if ipErr != nil {
@@ -121,19 +214,21 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		}
 	}
 
+	// проверка CrashLoopBackOff
+	crash, _ := s.checkPodCrashLoop(ctx, m.Username, m.Name)
+	if crash {
+		m.Status = model.MachineStatusFailed
+		if err := s.repo.UpdateStatusAndIP(ctx, m.ID, m.Status, m.ExternalIP); err != nil {
+			log.Printf("failed to update machine status to failed: %v", err)
+		}
+	}
+
 	log.Printf("DEBUG: MachineService.CreateMachine end id=%d status=%s ip=%v",
 		m.ID, m.Status, m.ExternalIP)
 
 	return m, nil
 }
 
-type DeleteMachineInput struct {
-	ID       int64
-	Username string
-	Name     string // опционально, если не хотим делать доп. SELECT
-}
-
-// DeleteMachine удаляет Helm-релиз и запись в user_machines
 func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInput) error {
 	if in.Username == "" {
 		return fmt.Errorf("DeleteMachine: empty username")
@@ -144,7 +239,7 @@ func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInpu
 
 	name := in.Name
 
-	// Если имя не передали, найдём по id
+	// если Name не передали — находим по ID
 	if name == "" {
 		machines, err := s.repo.ListByUsername(ctx, in.Username)
 		if err != nil {
@@ -163,7 +258,7 @@ func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInpu
 		name = found.Name
 	}
 
-	// 1. helm uninstall
+	// удаляем релиз в k8s
 	if s.helmChartDir != "" {
 		releaseName := fmt.Sprintf("machine-%s-%s", in.Username, name)
 		ns := in.Username
@@ -179,11 +274,10 @@ func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInpu
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("helm uninstall for machine failed: %v, output: %s", err, string(out))
-			// можно не падать, а продолжить, если хотим всё равно удалить запись
 		}
 	}
 
-	// 2. удалить запись в user_machines
+	// удаляем запись из БД
 	if err := s.repo.DeleteByID(ctx, in.ID, in.Username); err != nil {
 		return err
 	}
@@ -191,4 +285,27 @@ func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInpu
 	log.Printf("DEBUG: Machine deleted id=%d username=%s name=%s", in.ID, in.Username, name)
 
 	return nil
+}
+
+func (s *MachineService) checkPodCrashLoop(ctx context.Context, username, name string) (bool, error) {
+	ns := username
+	labelSelector := fmt.Sprintf("app=hello-%s-%s", username, name)
+
+	cmd := exec.CommandContext(
+		ctx,
+		"kubectl", "get", "pods",
+		"-n", ns,
+		"-l", labelSelector,
+		"-o", "jsonpath={.items[0].status.containerStatuses[0].state.waiting.reason}",
+	)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("checkPodCrashLoop kubectl error: %v, out=%s", err, string(out))
+		// не считаем это фатальной ошибкой: просто говорим, что краша не знаем
+		return false, nil
+	}
+
+	reason := strings.TrimSpace(string(out))
+	return reason == "CrashLoopBackOff", nil
 }

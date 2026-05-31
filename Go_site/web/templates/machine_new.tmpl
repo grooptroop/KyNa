@@ -213,7 +213,7 @@
   <div class="card">
     <!-- Сетка сервисов -->
     <div class="service-grid" id="service-grid">
-      <div class="service-card" data-service="web-app" data-default-name="web" data-default-mode="app">
+      <div class="service-card" data-service="web" data-default-name="web" data-default-mode="app">
         <div class="service-icon">W</div>
         <div class="service-title">Web application</div>
         <div class="service-desc">Nginx-based HTTP service, suitable for simple web apps.</div>
@@ -251,19 +251,25 @@
             <span class="hint">Will be used in resource name: hello-&lt;username&gt;-&lt;name&gt;</span>
           </div>
 
+
           <div class="form-field">
-            <label class="form-label">Mode</label>
-            <select name="mode" class="form-select" id="machine-mode">
-              <option value="app">app</option>
-              <option value="worker">worker</option>
+            <label class="form-label">Resources</label>
+            <select name="resources_preset" class="form-select" id="resources-preset">
+              <option value="small" selected>Small (50m CPU / 64Mi RAM)</option>
+              <option value="medium">Medium (100m CPU / 128Mi RAM)</option>
+              <option value="large">Large (250m CPU / 256Mi RAM)</option>
             </select>
+            <span class="hint">Controls CPU and memory for the pod.</span>
           </div>
 
           <div class="form-field">
-            <label class="form-label">Version (optional)</label>
-            <input type="text" name="version" class="form-input" id="machine-version" placeholder="e.g. 1.0.0 or image tag">
-            <span class="hint">We can later map this to Helm values (image tag, chart version, etc.).</span>
+            <label class="form-label">Image (optional)</label>
+            <input type="text" name="image" class="form-input" id="machine-image"
+                  placeholder="e.g. nginx:stable-alpine or ghcr.io/user/app:v1.0.2">
+            <span class="hint">If empty, we use a default image for this preset.</span>
           </div>
+
+
         </div>
 
         <div class="actions">
@@ -280,7 +286,6 @@
       const serviceKindInput = document.getElementById('service-kind');
       const serviceKindDisplay = document.getElementById('service-kind-display');
       const nameInput = document.getElementById('machine-name');
-      const modeSelect = document.getElementById('machine-mode');
 
       cards.forEach(card => {
         card.addEventListener('click', () => {
@@ -300,7 +305,6 @@
           if (!nameInput.value) {
             nameInput.value = defaultName;
           }
-          modeSelect.value = defaultMode;
         });
       });
     })();

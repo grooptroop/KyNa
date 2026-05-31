@@ -28,8 +28,11 @@ CREATE TABLE IF NOT EXISTS user_machines (
     username     TEXT NOT NULL REFERENCES user_provisions(username) ON DELETE CASCADE,
     name         TEXT NOT NULL,
     mode         TEXT NOT NULL,
+    service_kind TEXT NOT NULL DEFAULT 'web',
+    version      TEXT,
     status       TEXT NOT NULL DEFAULT 'pending',
     external_ip  TEXT,
+    resources_preset TEXT NOT NULL DEFAULT 'small',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );

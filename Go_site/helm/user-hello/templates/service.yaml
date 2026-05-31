@@ -1,3 +1,4 @@
+{{- if and .Values.service.enabled (ne .Values.serviceKind "worker") }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -7,10 +8,11 @@ metadata:
   annotations:
     metallb.io/address-pool: {{ .Values.metallb.addressPool | quote }}
 spec:
-  type: LoadBalancer
+  type: {{ .Values.service.type | default "LoadBalancer" }}
   selector:
     app: hello-{{ .Values.username }}-{{ .Values.name }}
   ports:
     - name: http
-      port: 80
-      targetPort: 80
+      port: {{ .Values.service.port | default 80 }}
+      targetPort: {{ .Values.containerPort | default 80 }}
+{{- end }}

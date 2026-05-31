@@ -2,12 +2,19 @@ username: ""
 name: ""
 domain: ""
 
+serviceKind: "web"    # web api worker
+
 mode: "app"
 
 metallb:
   addressPool: "192.168.1.200-192.168.1.250"
 
-image: "nginx:stable-alpine"
+image: 
+  repository: "nginx"
+  tag: "stable-alpine"
+  pullPloicy: "IfNotPresent"
+
+containerPort: 80
 
 resources:
   request:
@@ -20,3 +27,8 @@ resources:
 ingress:
   enabled: false
   className: "nginx"
+
+service: 
+  enabled: true 
+  type: "LoadBalancer"
+  port: 80

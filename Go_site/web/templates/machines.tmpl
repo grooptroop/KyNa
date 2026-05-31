@@ -85,7 +85,7 @@
       background-color: #202228;
     }
 
-    .col-ip { width: 120px; }
+    .col-ip { width: 160px; }
     .col-actions { width: 120px; }
 
     .tag {
@@ -147,7 +147,6 @@
       color: var(--text-muted);
     }
 
-    /* Базовая кнопка */
     .btn {
       display: inline-flex;
       align-items: center;
@@ -161,19 +160,17 @@
       transition: background-color 0.15s ease, transform 0.05s ease;
     }
 
-    /* Зелёная кнопка "New machine" */
     .btn-primary {
       background-color: var(--accent);
       color: #000;
       font-weight: 600;
-      border-radius: 999px; /* делаем её пилюлей */
+      border-radius: 999px;
     }
 
     .btn-primary:hover {
       background-color: var(--accent-soft);
     }
 
-    /* Округлая кнопка удаления */
     .btn-danger {
       background-color: #dc3545;
       border-radius: 999px;
@@ -203,6 +200,12 @@
     a:hover {
       text-decoration: underline;
     }
+
+    .empty-state {
+      font-size: 13px;
+      color: var(--text-muted);
+      padding-top: 4px;
+    }
   </style>
 </head>
 <body>
@@ -215,50 +218,84 @@
   </div>
 
   <div class="card">
-    <table>
-      <tr>
-        <th>Name</th>
-        <th>Mode</th>
-        <th>Status</th>
-        <th class="col-ip">External IP</th>
-        <th class="col-actions">Actions</th>
-      </tr>
-      {{ range .Machines }}
-      <tr>
-        <td>{{ .Name }}</td>
-        <td><span class="tag">{{ .Mode }}</span></td>
-        <td>
-          {{ if eq .Status "ready" }}
-          <span class="status status-ready">
-            <span class="status-dot"></span> ready
-          </span>
-          {{ else if eq .Status "failed" }}
-          <span class="status status-failed">
-            <span class="status-dot"></span> failed
-          </span>
-          {{ else }}
-          <span class="status status-pending">
-            <span class="status-dot"></span> pending
-          </span>
-          {{ end }}
-        </td>
-        <td>
-          {{ if .ExternalIP }}
-            <span class="ip-pill">{{ .ExternalIP }}</span>
-          {{ else }}
-            <span class="ip-pill-muted">waiting...</span>
-          {{ end }}
-        </td>
-        <td>
-          <form action="/me/machines/{{.ID}}/delete" method="post" style="display:inline;">
-            <button type="submit" class="btn btn-danger btn-sm">
-              Delete
-            </button>
-          </form>
-        </td>
-      </tr>
-      {{ end }}
-    </table>
+    {{ if eq (len .Machines) 0 }}
+      <div class="empty-state">
+        You don't have any machines yet. Click "New machine" to create one.
+      </div>
+    {{ else }}
+      <table>
+        <tr>
+          <th>Name</th>
+          <th>Service</th>
+          <th>Status</th>
+          <th>Resources</th>
+          <th class="col-ip">External IP</th>
+          <th class="col-actions">Actions</th>
+        </tr>
+        {{ range .Machines }}
+        <tr>
+          <td>{{ .Name }}</td>
+
+          <!-- вместо Mode показываем выбранный сервис -->
+          <td>
+            <span class="tag">
+              {{ if eq .ServiceKind "web" }}
+                Web application
+              {{ else if eq .ServiceKind "job" }}
+                Background job
+              {{ else }}
+                {{ .ServiceKind }}
+              {{ end }}
+            </span>
+          </td>
+
+          <td>
+            {{ if eq .Status "ready" }}
+              <span class="status status-ready">
+                <span class="status-dot"></span> ready
+              </span>
+            {{ else if eq .Status "failed" }}
+              <span class="status status-failed">
+                <span class="status-dot"></span> failed
+              </span>
+            {{ else }}
+              <span class="status status-pending">
+                <span class="status-dot"></span> pending
+              </span>
+            {{ end }}
+          </td>
+          <td>
+            <span class="tag">
+              {{ if eq .ResourcesPreset "small" }}
+                 50m CPU / 64Mi RAM
+              {{ else if eq .ResourcesPreset "medium" }}
+                 100m CPU / 128Mi RAM
+              {{ else if eq .ResourcesPreset "large" }}
+                 250m CPU / 256Mi RAM
+              {{ else }}
+                • {{ .ResourcesPreset }}
+              {{ end }}
+            </span> 
+          </td>
+          <td>
+            {{ if .ExternalIP }}
+              <span class="ip-pill">{{ .ExternalIP }}</span>
+            {{ else }}
+              <span class="ip-pill-muted">waiting...</span>
+            {{ end }}
+          </td>
+
+          <td>
+            <form action="/me/machines/{{ .ID }}/delete" method="post" style="display:inline;">
+              <button type="submit" class="btn btn-danger btn-sm">
+                Delete
+              </button>
+            </form>
+          </td>
+        </tr>
+        {{ end }}
+      </table>
+    {{ end }}
   </div>
 </body>
 </html>

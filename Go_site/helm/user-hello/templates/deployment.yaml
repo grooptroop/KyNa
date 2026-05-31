@@ -4,6 +4,7 @@ metadata:
   name: hello-{{ .Values.username }}-{{ .Values.name }}
   labels:
     app: hello-{{ .Values.username }}-{{ .Values.name }}
+    service-kind: {{ .Values.serviceKind | default "web" }}
 spec:
   replicas: 1
   selector:
@@ -13,12 +14,14 @@ spec:
     metadata:
       labels:
         app: hello-{{ .Values.username }}-{{ .Values.name }}
+        service-kind: {{ .Values.serviceKind | default "web" }}
     spec:
       containers:
         - name: hello
-          image: {{ .Values.image | default "nginx:stable-alpine" }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPloicy | default "IfNotPresent" }}          
           ports:
-            - containerPort: 80
+            - containerPort: {{ .Values.containerPort | default 80 }}
           resources:
             requests:
               cpu: {{ .Values.resources.request.cpu | default "50m" }}

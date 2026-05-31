@@ -15,10 +15,19 @@ type MachineRepository struct {
 func NewMachineRepository(pool *pgxpool.Pool) *MachineRepository {
 	return &MachineRepository{pool: pool}
 }
-
 func (r *MachineRepository) ListByUsername(ctx context.Context, username string) ([]model.UserMachine, error) {
 	rows, err := r.pool.Query(ctx, `
-        SELECT id, username, name, mode, status, external_ip, created_at, updated_at
+        SELECT
+            id,
+            username,
+            name,
+            mode,
+            service_kind,
+            status,
+            external_ip,
+            resources_preset,
+            created_at,
+            updated_at
         FROM user_machines
         WHERE username = $1
         ORDER BY id DESC`,
@@ -37,8 +46,10 @@ func (r *MachineRepository) ListByUsername(ctx context.Context, username string)
 			&m.Username,
 			&m.Name,
 			&m.Mode,
+			&m.ServiceKind,
 			&m.Status,
 			&m.ExternalIP,
+			&m.ResourcesPreset,
 			&m.CreatedAt,
 			&m.UpdatedAt,
 		); err != nil {
@@ -61,10 +72,24 @@ func (r *MachineRepository) Create(ctx context.Context, m *model.UserMachine) er
 	}
 
 	err := r.pool.QueryRow(ctx, `
-        INSERT INTO user_machines (username, name, mode, status, external_ip)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, created_at, updated_at`,
-		m.Username, m.Name, m.Mode, m.Status, m.ExternalIP,
+    INSERT INTO user_machines (
+        username,
+        name,
+        mode,
+        service_kind,
+        status,
+        external_ip,
+        resources_preset
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING id, created_at, updated_at`,
+		m.Username,
+		m.Name,
+		m.Mode,
+		m.ServiceKind,
+		m.Status,
+		m.ExternalIP,
+		m.ResourcesPreset, // вот это важное поле
 	).Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert user_machines: %w", err)
