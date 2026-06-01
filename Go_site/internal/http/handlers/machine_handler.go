@@ -72,6 +72,12 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 	resourcesPreset := c.PostForm("resources_preset")
 	image := c.PostForm("image")
 
+	containerPortStr := c.PostForm("container_port")
+	servicePortStr := c.PostForm("service_port")
+
+	containerPort, _ := strconv.Atoi(containerPortStr)
+	servicePort, _ := strconv.Atoi(servicePortStr)
+
 	if serviceKind == "" {
 		c.String(http.StatusBadRequest, "service type is required (choose a card)")
 		return
@@ -86,8 +92,8 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 	}
 
 	log.Printf(
-		"CREATE MACHINE: user=%s service=%s name=%s version=%s resources=%s image=%s",
-		username, serviceKind, name, version, resourcesPreset, image,
+		"CREATE MACHINE: user=%s service=%s name=%s version=%s resources=%s image=%s cport=%d sport=%d",
+		username, serviceKind, name, version, resourcesPreset, image, containerPort, servicePort,
 	)
 
 	in := service.CreateMachineInput{
@@ -97,6 +103,8 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		Version:         version,
 		ResourcesPreset: resourcesPreset,
 		Image:           image,
+		ContainerPort:   containerPort,
+		ServicePort:     servicePort,
 	}
 
 	_, err := h.svc.CreateMachine(c.Request.Context(), in)

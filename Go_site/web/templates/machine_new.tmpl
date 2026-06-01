@@ -126,7 +126,7 @@
 
     .form-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(4, minmax(200px, 1fr));
       gap: 12px;
       margin-bottom: 16px;
     }
@@ -269,7 +269,31 @@
             <span class="hint">If empty, we use a default image for this preset.</span>
           </div>
 
+          <div class="form-field">
+            <label class="form-label">Container port</label>
+            <input type="number"
+                   name="container_port"
+                   id="container-port"
+                   class="form-input"
+                   min="1" max="65535"
+                   value="80">
+            <span class="hint">
+              Port your app listens on inside the container (80 for Web, 8080 for API by default).
+            </span>
+          </div>
 
+          <div class="form-field">
+            <label class="form-label">Service port</label>
+            <input type="number"
+                   name="service_port"
+                   id="service-port"
+                   class="form-input"
+                   min="1" max="65535"
+                   value="80">
+            <span class="hint">
+              Port exposed by the Kubernetes Service (defaults to same as container port).
+            </span>
+          </div>
         </div>
 
         <div class="actions">
@@ -286,6 +310,27 @@
       const serviceKindInput = document.getElementById('service-kind');
       const serviceKindDisplay = document.getElementById('service-kind-display');
       const nameInput = document.getElementById('machine-name');
+      const containerPortInput = document.getElementById('container-port');
+      const servicePortInput = document.getElementById('service-port');
+
+      function setDefaultsForKind(kind) {
+        if (kind === 'web') {
+          if (!containerPortInput.value || containerPortInput.value === '8080') {
+            containerPortInput.value = 80;
+          }
+          if (!servicePortInput.value || servicePortInput.value === '8080') {
+            servicePortInput.value = 80;
+          }
+        } else if (kind === 'api') {
+          if (!containerPortInput.value || containerPortInput.value === '80') {
+            containerPortInput.value = 8080;
+          }
+          if (!servicePortInput.value || servicePortInput.value === '80') {
+            servicePortInput.value = 8080;
+          }
+        } else if (kind === 'worker') {
+        }
+      }
 
       cards.forEach(card => {
         card.addEventListener('click', () => {
@@ -297,7 +342,6 @@
 
           const kind = card.getAttribute('data-service');
           const defaultName = card.getAttribute('data-default-name') || "";
-          const defaultMode = card.getAttribute('data-default-mode') || "app";
 
           serviceKindInput.value = kind;
           serviceKindDisplay.value = card.querySelector('.service-title').textContent;
@@ -305,6 +349,8 @@
           if (!nameInput.value) {
             nameInput.value = defaultName;
           }
+
+          setDefaultsForKind(kind);
         });
       });
     })();

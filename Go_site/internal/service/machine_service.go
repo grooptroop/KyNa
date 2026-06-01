@@ -33,6 +33,8 @@ type CreateMachineInput struct {
 	Version         string
 	ResourcesPreset string
 	Image           string
+	ContainerPort   int
+	ServicePort     int
 }
 
 type DeleteMachineInput struct {
@@ -47,8 +49,8 @@ func (s *MachineService) ListMachines(ctx context.Context, username string) ([]m
 
 func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInput) (*model.UserMachine, error) {
 	log.Printf(
-		"DEBUG: MachineService.CreateMachine start username=%q name=%q mode=%q serviceKind=%q version=%q resourcesPreset=%q",
-		in.Username, in.Name, in.Mode, in.ServiceKind, in.Version, in.ResourcesPreset,
+		"DEBUG: MachineService.CreateMachine start username=%q name=%q mode=%q serviceKind=%q version=%q resourcesPreset=%q cport=%d sport=%d",
+		in.Username, in.Name, in.Mode, in.ServiceKind, in.Version, in.ResourcesPreset, in.ContainerPort, in.ServicePort,
 	)
 
 	if in.Username == "" {
@@ -73,6 +75,19 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		resources = "small"
 	}
 
+	containerPort := 80
+	svcPort := 80
+	if serviceKind == "api" {
+		containerPort = 8080
+		svcPort = 8080
+	}
+	if in.ContainerPort > 0 {
+		containerPort = in.ContainerPort
+	}
+	if in.ServicePort > 0 {
+		svcPort = in.ServicePort
+	}
+
 	m := &model.UserMachine{
 		Username:        in.Username,
 		Name:            in.Name,
@@ -80,7 +95,6 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		ServiceKind:     serviceKind,
 		Status:          model.MachineStatusPending,
 		ResourcesPreset: resources,
-		// Version:      in.Version, // если добавишь в модель
 	}
 
 	if err := s.repo.Create(ctx, m); err != nil {
@@ -97,8 +111,6 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 
 	svcEnabled := true
 	svcType := "LoadBalancer"
-	svcPort := 80
-	containerPort := 80
 	ingressEnabled := false
 
 	switch serviceKind {
@@ -239,7 +251,6 @@ func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInpu
 
 	name := in.Name
 
-	// если Name не передали — находим по ID
 	if name == "" {
 		machines, err := s.repo.ListByUsername(ctx, in.Username)
 		if err != nil {
@@ -258,7 +269,6 @@ func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInpu
 		name = found.Name
 	}
 
-	// удаляем релиз в k8s
 	if s.helmChartDir != "" {
 		releaseName := fmt.Sprintf("machine-%s-%s", in.Username, name)
 		ns := in.Username
@@ -277,7 +287,6 @@ func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInpu
 		}
 	}
 
-	// удаляем запись из БД
 	if err := s.repo.DeleteByID(ctx, in.ID, in.Username); err != nil {
 		return err
 	}
