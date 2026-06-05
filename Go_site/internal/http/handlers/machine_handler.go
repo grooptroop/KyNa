@@ -47,6 +47,24 @@ func (h *MachineHandler) ListMachines(c *gin.Context) {
 	c.HTML(http.StatusOK, "machines.tmpl", data)
 }
 
+// GET /me/machines/json — для polling
+func (h *MachineHandler) ListMachinesJSON(c *gin.Context) {
+	username := middleware.CurrentUsername(c)
+	if username == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	items, err := h.svc.ListMachinesJSON(c.Request.Context(), username)
+	if err != nil {
+		log.Printf("FAILED TO LIST MACHINES JSON: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list machines"})
+		return
+	}
+
+	c.JSON(http.StatusOK, items)
+}
+
 func (h *MachineHandler) ShowCreateForm(c *gin.Context) {
 	username := middleware.CurrentUsername(c)
 	if username == "" {
@@ -64,7 +82,7 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		return
 	}
 
-	if err := c.Request.ParseMultipartForm(2 << 50); err != nil {
+	if err := c.Request.ParseMultipartForm(2 << 20); err != nil { // 2MiB более чем достаточно для .tar пути
 		c.String(http.StatusBadRequest, "invalid form: "+err.Error())
 		return
 	}
@@ -163,6 +181,7 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		return
 	}
 
+	// Сразу редиректим на список машин — там уже крутится polling
 	c.Redirect(http.StatusSeeOther, "/me/machines")
 }
 

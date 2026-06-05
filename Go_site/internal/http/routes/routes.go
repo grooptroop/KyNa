@@ -48,6 +48,7 @@ func Register(
 		me.GET("/machines/new", machineHandler.ShowCreateForm)
 		me.POST("/machines", machineHandler.CreateMachine)
 		me.POST("/machines/:id/delete", machineHandler.DeleteMachine)
-
+		me.GET("/machines/json", machineHandler.ListMachinesJSON)
 	}
+
 }

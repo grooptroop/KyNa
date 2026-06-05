@@ -53,6 +53,43 @@ func (s *MachineService) ListMachines(ctx context.Context, username string) ([]m
 	return s.repo.ListByUsername(ctx, username)
 }
 
+// JSON DTO для /me/machines/json
+type MachineJSON struct {
+	ID          int64   `json:"id"`
+	Name        string  `json:"name"`
+	ServiceKind string  `json:"service_kind"`
+	Status      string  `json:"status"`
+	Resources   string  `json:"resources_preset"`
+	AccessScope string  `json:"access_scope"`
+	ExternalIP  *string `json:"external_ip,omitempty"`
+	ClusterIP   *string `json:"cluster_ip,omitempty"`
+	IngressHost *string `json:"ingress_host,omitempty"`
+}
+
+// Удобный метод для JSON‑эндпоинта.
+func (s *MachineService) ListMachinesJSON(ctx context.Context, username string) ([]MachineJSON, error) {
+	ms, err := s.repo.ListByUsername(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]MachineJSON, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, MachineJSON{
+			ID:          m.ID,
+			Name:        m.Name,
+			ServiceKind: m.ServiceKind,
+			Status:      string(m.Status),
+			Resources:   m.ResourcesPreset,
+			AccessScope: m.AccessScope,
+			ExternalIP:  m.ExternalIP,
+			ClusterIP:   m.ClusterIP,
+			IngressHost: m.IngressHost,
+		})
+	}
+	return out, nil
+}
+
 func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInput) (*model.UserMachine, error) {
 	log.Printf(
 		"DEBUG: MachineService.CreateMachine start username=%q name=%q mode=%q serviceKind=%q version=%q resourcesPreset=%q cport=%d sport=%d",
@@ -79,19 +116,6 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 	resources := in.ResourcesPreset
 	if resources == "" {
 		resources = "small"
-	}
-
-	containerPort := 80
-	svcPort := 80
-	if serviceKind == "api" {
-		containerPort = 8080
-		svcPort = 8080
-	}
-	if in.ContainerPort > 0 {
-		containerPort = in.ContainerPort
-	}
-	if in.ServicePort > 0 {
-		svcPort = in.ServicePort
 	}
 
 	var ingressHostPtr *string
@@ -123,191 +147,19 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 	log.Printf("DEBUG: Machine saved to DB id=%d username=%s name=%s serviceKind=%s resources=%s",
 		m.ID, m.Username, m.Name, m.ServiceKind, m.ResourcesPreset)
 
+	// если helmChartDir не задан — просто возвращаем pending‑машину
 	if s.helmChartDir == "" {
 		return m, nil
 	}
 
-	svcEnabled := true
-	svcType := "ClusterIP"
-	ingressEnabled := false
+	// копии для фоновой горутины
+	inCopy := in
+	mCopy := *m
 
-	switch serviceKind {
-	case "web":
-		svcType = "LoadBalancer"
-		svcPort = containerPort
-		ingressEnabled = false
-
-	case "api":
-		if accessScope == "public" {
-			if in.EnableIngress && in.IngressHost != "" {
-				svcType = "ClusterIP"
-				ingressEnabled = true
-			} else {
-				svcType = "LoadBalancer"
-				ingressEnabled = false
-			}
-		} else {
-			svcType = "ClusterIP"
-			ingressEnabled = false
-		}
-		svcPort = containerPort
-
-	case "worker":
-		svcEnabled = false
-		ingressEnabled = false
-	}
-
-	cpuReq := "50m"
-	memReq := "64Mi"
-	cpuLimit := "200m"
-	memLimit := "128Mi"
-
-	switch resources {
-	case "medium":
-		cpuReq = "100m"
-		memReq = "128Mi"
-		cpuLimit = "300m"
-		memLimit = "256Mi"
-	case "large":
-		cpuReq = "250m"
-		memReq = "256Mi"
-		cpuLimit = "500m"
-		memLimit = "512Mi"
-	}
-
-	imgRepo := "nginx"
-	imgTag := "stable-alpine"
-
-	if in.ImageTarPath != "" {
-		loadedImage, err := loadDockerImageFromTar(ctx, in.ImageTarPath)
-		if err != nil {
-			log.Printf("failed to load docker image from tar %s: %v", in.ImageTarPath, err)
-			return nil, fmt.Errorf("failed to load docker image: %w", err)
-		}
-
-		parts := strings.Split(loadedImage, ":")
-		if len(parts) == 2 {
-			imgRepo = parts[0]
-			imgTag = parts[1]
-		} else {
-			imgRepo = loadedImage
-		}
-
-		if err := os.Remove(in.ImageTarPath); err != nil {
-			log.Printf("failed to remove temp tar %s: %v", in.ImageTarPath, err)
-		}
-
-	} else if in.Image != "" {
-		parts := strings.Split(in.Image, ":")
-		if len(parts) == 2 {
-			imgRepo = parts[0]
-			imgTag = parts[1]
-		} else {
-			imgRepo = in.Image
-			if in.Version != "" {
-				imgTag = in.Version
-			}
-		}
-	} else {
-		if in.Version != "" {
-			imgTag = in.Version
-		}
-	}
-
-	releaseName := fmt.Sprintf("machine-%s-%s", m.Username, m.Name)
-	ns := m.Username
-
-	args := []string{
-		"install",
-		releaseName,
-		s.helmChartDir,
-		"--namespace", ns,
-		"--set", fmt.Sprintf("username=%s", m.Username),
-		"--set", fmt.Sprintf("name=%s", m.Name),
-		"--set", fmt.Sprintf("mode=%s", m.Mode),
-		"--set", fmt.Sprintf("serviceKind=%s", serviceKind),
-		"--set", fmt.Sprintf("image.repository=%s", imgRepo),
-		"--set", fmt.Sprintf("image.tag=%s", imgTag),
-		"--set", fmt.Sprintf("containerPort=%d", containerPort),
-		"--set", fmt.Sprintf("service.enabled=%t", svcEnabled),
-		"--set", fmt.Sprintf("service.type=%s", svcType),
-		"--set", fmt.Sprintf("service.port=%d", svcPort),
-		"--set", fmt.Sprintf("ingress.enabled=%t", ingressEnabled),
-		"--set", fmt.Sprintf("resources.request.cpu=%s", cpuReq),
-		"--set", fmt.Sprintf("resources.request.memory=%s", memReq),
-		"--set", fmt.Sprintf("resources.limits.cpu=%s", cpuLimit),
-		"--set", fmt.Sprintf("resources.limits.memory=%s", memLimit),
-	}
-	if in.IngressHost != "" {
-		args = append(args,
-			"--set", fmt.Sprintf("ingress.host=%s", in.IngressHost),
-		)
-	}
-
-	log.Printf("DEBUG: using image %s:%s for machine %s/%s", imgRepo, imgTag, m.Username, m.Name)
-	log.Printf("DEBUG: helm args: %v", args)
-	cmd := exec.CommandContext(ctx, "helm", args...)
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("helm install for machine failed: %v, output: %s", err, string(out))
-		return m, nil
-	}
-
-	svcName := fmt.Sprintf("%s-%s", m.Username, m.Name)
-	ns = m.Username
-
-	clusterIPCmd := exec.CommandContext(
-		ctx,
-		"kubectl",
-		"get",
-		"svc",
-		svcName,
-		"-n", ns,
-		"-o", "jsonpath={.spec.clusterIP}",
-	)
-
-	clusterIPOut, clusterIPErr := clusterIPCmd.CombinedOutput()
-	clusterIP := strings.TrimSpace(string(clusterIPOut))
-	if clusterIPErr != nil {
-		log.Printf("kubectl get svc cluster ip for machine failed: %v, output: %s", clusterIPErr, string(clusterIPOut))
-	}
-	if clusterIP != "" {
-		m.ClusterIP = &clusterIP
-	}
-
-	ipCmd := exec.CommandContext(
-		ctx,
-		"kubectl",
-		"get",
-		"svc",
-		svcName,
-		"-n", ns,
-		"-o", "jsonpath={.status.loadBalancer.ingress[0].ip}",
-	)
-
-	ipOut, ipErr := ipCmd.CombinedOutput()
-	externalIP := strings.TrimSpace(string(ipOut))
-	if ipErr != nil {
-		log.Printf("kubectl get svc external ip for machine failed: %v, output: %s", ipErr, string(ipOut))
-	}
-	if externalIP != "" {
-		m.ExternalIP = &externalIP
-	}
-
-	crash, _ := s.checkPodCrashLoop(ctx, m.Username, m.Name)
-	if crash {
-		m.Status = model.MachineStatusFailed
-	} else {
-		m.Status = model.MachineStatusReady
-	}
-
-	if err := s.repo.UpdateStatusAndIP(ctx, m.ID, m.Status, m.ExternalIP); err != nil {
-		log.Printf("failed to update machine status/ip in db: %v", err)
-	}
-
-	log.Printf("DEBUG: MachineService.CreateMachine end id=%d status=%s external_ip=%v cluster_ip=%v",
-		m.ID, m.Status, m.ExternalIP, m.ClusterIP)
+	go func() {
+		bg := context.Background()
+		s.provisionMachine(bg, &mCopy, inCopy)
+	}()
 
 	return m, nil
 }
@@ -392,7 +244,6 @@ func (s *MachineService) checkPodCrashLoop(ctx context.Context, username, name s
 func loadDockerImageFromTar(ctx context.Context, tarPath string) (string, error) {
 	if tarPath == "" {
 		return "", fmt.Errorf("empty tar path")
-
 	}
 
 	cmd := exec.CommandContext(ctx, "docker", "image", "load", "-i", tarPath)
@@ -417,4 +268,220 @@ func loadDockerImageFromTar(ctx context.Context, tarPath string) (string, error)
 	log.Printf("DEBUG: docker load output: %s", out)
 	log.Printf("loaded docker image from tar %s: %s", tarPath, imageName)
 	return imageName, nil
+}
+
+func (s *MachineService) provisionMachine(ctx context.Context, m *model.UserMachine, in CreateMachineInput) {
+	log.Printf("DEBUG: provisionMachine start id=%d username=%s name=%s", m.ID, m.Username, m.Name)
+
+	serviceKind := m.ServiceKind
+	resources := m.ResourcesPreset
+
+	svcEnabled := true
+	svcType := "ClusterIP"
+	ingressEnabled := false
+
+	containerPort := 80
+	svcPort := 80
+	if serviceKind == "api" {
+		containerPort = 8080
+		svcPort = 8080
+	}
+	if in.ContainerPort > 0 {
+		containerPort = in.ContainerPort
+	}
+	if in.ServicePort > 0 {
+		svcPort = in.ServicePort
+	}
+
+	accessScope := in.AccessScope
+	if accessScope != "internal" && accessScope != "public" {
+		accessScope = "internal"
+	}
+
+	switch serviceKind {
+	case "web":
+		svcType = "LoadBalancer"
+		svcPort = containerPort
+		ingressEnabled = false
+
+	case "api":
+		if accessScope == "public" {
+			if in.EnableIngress && in.IngressHost != "" {
+				svcType = "ClusterIP"
+				ingressEnabled = true
+			} else {
+				svcType = "LoadBalancer"
+				ingressEnabled = false
+			}
+		} else {
+			svcType = "ClusterIP"
+			ingressEnabled = false
+		}
+		svcPort = containerPort
+
+	case "worker":
+		svcEnabled = false
+		ingressEnabled = false
+	}
+
+	cpuReq := "50m"
+	memReq := "64Mi"
+	cpuLimit := "200m"
+	memLimit := "128Mi"
+
+	switch resources {
+	case "medium":
+		cpuReq = "100m"
+		memReq = "128Mi"
+		cpuLimit = "300m"
+		memLimit = "256Mi"
+	case "large":
+		cpuReq = "250m"
+		memReq = "256Mi"
+		cpuLimit = "500m"
+		memLimit = "512Mi"
+	}
+
+	imgRepo := "nginx"
+	imgTag := "stable-alpine"
+
+	if in.ImageTarPath != "" {
+		loadedImage, err := loadDockerImageFromTar(ctx, in.ImageTarPath)
+		if err != nil {
+			log.Printf("failed to load docker image from tar %s: %v", in.ImageTarPath, err)
+			if err2 := s.repo.UpdateStatusAndIP(ctx, m.ID, model.MachineStatusFailed, nil); err2 != nil {
+				log.Printf("failed to update machine status/ip in db after tar error: %v", err2)
+			}
+			return
+		}
+
+		parts := strings.Split(loadedImage, ":")
+		if len(parts) == 2 {
+			imgRepo = parts[0]
+			imgTag = parts[1]
+		} else {
+			imgRepo = loadedImage
+		}
+
+		if err := os.Remove(in.ImageTarPath); err != nil {
+			log.Printf("failed to remove temp tar %s: %v", in.ImageTarPath, err)
+		}
+
+	} else if in.Image != "" {
+		parts := strings.Split(in.Image, ":")
+		if len(parts) == 2 {
+			imgRepo = parts[0]
+			imgTag = parts[1]
+		} else {
+			imgRepo = in.Image
+			if in.Version != "" {
+				imgTag = in.Version
+			}
+		}
+	} else {
+		if in.Version != "" {
+			imgTag = in.Version
+		}
+	}
+
+	releaseName := fmt.Sprintf("machine-%s-%s", m.Username, m.Name)
+	ns := m.Username
+
+	args := []string{
+		"install",
+		releaseName,
+		s.helmChartDir,
+		"--namespace", ns,
+		"--set", fmt.Sprintf("username=%s", m.Username),
+		"--set", fmt.Sprintf("name=%s", m.Name),
+		"--set", fmt.Sprintf("mode=%s", m.Mode),
+		"--set", fmt.Sprintf("serviceKind=%s", serviceKind),
+		"--set", fmt.Sprintf("image.repository=%s", imgRepo),
+		"--set", fmt.Sprintf("image.tag=%s", imgTag),
+		"--set", fmt.Sprintf("containerPort=%d", containerPort),
+		"--set", fmt.Sprintf("service.enabled=%t", svcEnabled),
+		"--set", fmt.Sprintf("service.type=%s", svcType),
+		"--set", fmt.Sprintf("service.port=%d", svcPort),
+		"--set", fmt.Sprintf("ingress.enabled=%t", ingressEnabled),
+		"--set", fmt.Sprintf("resources.request.cpu=%s", cpuReq),
+		"--set", fmt.Sprintf("resources.request.memory=%s", memReq),
+		"--set", fmt.Sprintf("resources.limits.cpu=%s", cpuLimit),
+		"--set", fmt.Sprintf("resources.limits.memory=%s", memLimit),
+	}
+	if in.IngressHost != "" {
+		args = append(args,
+			"--set", fmt.Sprintf("ingress.host=%s", in.IngressHost),
+		)
+	}
+
+	log.Printf("DEBUG: [async] using image %s:%s for machine %s/%s", imgRepo, imgTag, m.Username, m.Name)
+	log.Printf("DEBUG: [async] helm args: %v", args)
+
+	cmd := exec.CommandContext(ctx, "helm", args...)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("helm install for machine failed: %v, output: %s", err, string(out))
+		if err2 := s.repo.UpdateStatusAndIP(ctx, m.ID, model.MachineStatusFailed, nil); err2 != nil {
+			log.Printf("failed to update machine status/ip in db after helm error: %v", err2)
+		}
+		return
+	}
+
+	svcName := fmt.Sprintf("%s-%s", m.Username, m.Name)
+	ns = m.Username
+
+	// clusterIP
+	clusterIPCmd := exec.CommandContext(
+		ctx,
+		"kubectl",
+		"get",
+		"svc",
+		svcName,
+		"-n", ns,
+		"-o", "jsonpath={.spec.clusterIP}",
+	)
+
+	clusterIPOut, clusterIPErr := clusterIPCmd.CombinedOutput()
+	clusterIP := strings.TrimSpace(string(clusterIPOut))
+	if clusterIPErr != nil {
+		log.Printf("kubectl get svc cluster ip for machine failed: %v, output: %s", clusterIPErr, string(clusterIPOut))
+	}
+	if clusterIP != "" {
+		m.ClusterIP = &clusterIP
+	}
+
+	// external IP
+	ipCmd := exec.CommandContext(
+		ctx,
+		"kubectl",
+		"get",
+		"svc",
+		svcName,
+		"-n", ns,
+		"-o", "jsonpath={.status.loadBalancer.ingress[0].ip}",
+	)
+
+	ipOut, ipErr := ipCmd.CombinedOutput()
+	externalIP := strings.TrimSpace(string(ipOut))
+	if ipErr != nil {
+		log.Printf("kubectl get svc external ip for machine failed: %v, output: %s", ipErr, string(ipOut))
+	}
+	if externalIP != "" {
+		m.ExternalIP = &externalIP
+	}
+
+	crash, _ := s.checkPodCrashLoop(ctx, m.Username, m.Name)
+	if crash {
+		m.Status = model.MachineStatusFailed
+	} else {
+		m.Status = model.MachineStatusReady
+	}
+
+	if err := s.repo.UpdateStatusAndIP(ctx, m.ID, m.Status, m.ExternalIP); err != nil {
+		log.Printf("failed to update machine status/ip in db: %v", err)
+	}
+
+	log.Printf("DEBUG: provisionMachine end id=%d status=%s external_ip=%v cluster_ip=%v",
+		m.ID, m.Status, m.ExternalIP, m.ClusterIP)
 }

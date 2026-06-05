@@ -95,7 +95,7 @@
       letter-spacing: 0.03em;
     }
 
-    .status {
+    .status-badge {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -224,7 +224,7 @@
         You don't have any machines yet. Click "New machine" to create one.
       </div>
     {{ else }}
-      <table>
+      <table id="machines-table">
         <tr>
           <th>Name</th>
           <th>Service</th>
@@ -234,10 +234,9 @@
           <th class="col-actions">Actions</th>
         </tr>
         {{ range .Machines }}
-        <tr>
-          <td>{{ .Name }}</td>
+        <tr data-machine-id="{{ .ID }}">
+          <td class="machine-name">{{ .Name }}</td>
 
-          <!-- вместо Mode показываем выбранный сервис -->
           <td>
             <span class="tag">
               {{ if eq .ServiceKind "web" }}
@@ -250,17 +249,17 @@
             </span>
           </td>
 
-          <td>
+          <td class="machine-status">
             {{ if eq .Status "ready" }}
-              <span class="status status-ready">
+              <span class="status-badge status-ready">
                 <span class="status-dot"></span> ready
               </span>
             {{ else if eq .Status "failed" }}
-              <span class="status status-failed">
+              <span class="status-badge status-failed">
                 <span class="status-dot"></span> failed
               </span>
             {{ else }}
-              <span class="status status-pending">
+              <span class="status-badge status-pending">
                 <span class="status-dot"></span> pending
               </span>
             {{ end }}
@@ -280,25 +279,20 @@
             </span>
           </td>
 
-          <td>
+          <td class="machine-ip">
             {{ if .ExternalIP }}
               {{ if .IngressHost }}
-                <!-- public + ingress + есть ExternalIP -->
                 <span class="ip-pill">{{ .IngressHost }} / {{ .ExternalIP }}</span>
               {{ else }}
-                <!-- public без ingress: чистый external IP -->
                 <span class="ip-pill">{{ .ExternalIP }}</span>
               {{ end }}
             {{ else if .IngressHost }}
-              <!-- public + ingress, DNS без внешнего IP -->
               <span class="ip-pill">{{ .IngressHost }}</span>
             {{ else if eq .AccessScope "internal" }}
-              <!-- internal only: показываем DNS внутри кластера -->
               <span class="ip-pill">
                 {{ .Username }}-{{ .Name }}.{{ .Username }}
               </span>
             {{ else }}
-              <!-- public, но пока нет external IP (LB pending) -->
               <span class="ip-pill-muted">waiting...</span>
             {{ end }}
           </td>
@@ -315,6 +309,108 @@
       </table>
     {{ end }}
   </div>
+
+  <script>
+    (function() {
+      const table = document.getElementById('machines-table');
+      if (!table) return;
+
+      const POLL_INTERVAL_MS = 3000;
+
+      function renderStatusBadge(status) {
+        const span = document.createElement('span');
+        span.classList.add('status-badge');
+        const s = (status || '').toLowerCase();
+        if (s === 'ready') span.classList.add('status-ready');
+        else if (s === 'failed') span.classList.add('status-failed');
+        else span.classList.add('status-pending');
+
+        const dot = document.createElement('span');
+        dot.classList.add('status-dot');
+        span.appendChild(dot);
+
+        span.appendChild(document.createTextNode(' ' + (s || 'pending')));
+        return span;
+      }
+
+      function updateRow(row, m) {
+        // status
+        const statusCell = row.querySelector('.machine-status');
+        if (statusCell) {
+          statusCell.innerHTML = '';
+          statusCell.appendChild(renderStatusBadge(m.status));
+        }
+
+        // ip
+        const ipCell = row.querySelector('.machine-ip');
+        if (ipCell) {
+          ipCell.innerHTML = '';
+          if (m.external_ip) {
+            if (m.ingress_host) {
+              const span = document.createElement('span');
+              span.className = 'ip-pill';
+              span.textContent = m.ingress_host + ' / ' + m.external_ip;
+              ipCell.appendChild(span);
+            } else {
+              const span = document.createElement('span');
+              span.className = 'ip-pill';
+              span.textContent = m.external_ip;
+              ipCell.appendChild(span);
+            }
+          } else if (m.ingress_host) {
+            const span = document.createElement('span');
+            span.className = 'ip-pill';
+            span.textContent = m.ingress_host;
+            ipCell.appendChild(span);
+          } else if (m.access_scope === 'internal') {
+            const nameCell = row.querySelector('.machine-name');
+            const machineName = nameCell ? nameCell.textContent.trim() : '';
+            const username = "{{ .Username }}";
+            const span = document.createElement('span');
+            span.className = 'ip-pill';
+            span.textContent = username + '-' + machineName + '.' + username;
+            ipCell.appendChild(span);
+          } else {
+            const span = document.createElement('span');
+            span.className = 'ip-pill-muted';
+            span.textContent = 'waiting...';
+            ipCell.appendChild(span);
+          }
+        }
+      }
+
+      function hasPending() {
+        return !!table.querySelector('.machine-status .status-badge.status-pending');
+      }
+
+      async function poll() {
+        try {
+          const resp = await fetch('/me/machines/json', { cache: 'no-store' });
+          if (!resp.ok) return;
+          const data = await resp.json();
+          if (!Array.isArray(data)) return;
+
+          const byId = new Map();
+          data.forEach(m => byId.set(String(m.id), m));
+
+          const rows = table.querySelectorAll('tbody tr[data-machine-id], tr[data-machine-id]');
+          rows.forEach(row => {
+            const id = row.getAttribute('data-machine-id');
+            const m = byId.get(id);
+            if (!m) return;
+            updateRow(row, m);
+          });
+        } catch (e) {
+          // молча игнорим
+        }
+      }
+
+      if (hasPending()) {
+        poll();
+        setInterval(poll, POLL_INTERVAL_MS);
+      }
+    })();
+  </script>
 </body>
 </html>
 {{ end }}
