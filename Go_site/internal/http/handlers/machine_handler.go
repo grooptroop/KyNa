@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/grooptroop/KyNa/Go_site/internal/http/middleware"
@@ -96,6 +97,21 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		username, serviceKind, name, version, resourcesPreset, image, containerPort, servicePort,
 	)
 
+	enableIngress := c.PostForm("enable_ingress") == "on"
+	ingressHost := c.PostForm("ingress_host")
+
+	accessScope := c.PostForm("access_scope")
+
+	if accessScope == "public" && serviceKind == "api" {
+		enableIngress = c.PostForm("enable_ingress") == "on"
+		if enableIngress {
+			ingressHost = strings.TrimSpace(c.PostForm("ingress_host"))
+			if ingressHost == "" {
+				enableIngress = false
+			}
+		}
+	}
+
 	in := service.CreateMachineInput{
 		Username:        username,
 		Name:            name,
@@ -105,6 +121,9 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		Image:           image,
 		ContainerPort:   containerPort,
 		ServicePort:     servicePort,
+		AccessScope:     accessScope,
+		EnableIngress:   enableIngress,
+		IngressHost:     ingressHost,
 	}
 
 	_, err := h.svc.CreateMachine(c.Request.Context(), in)
@@ -117,7 +136,6 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 	c.Redirect(http.StatusSeeOther, "/me/machines")
 }
 
-// POST /me/machines/:id/delete
 func (h *MachineHandler) DeleteMachine(c *gin.Context) {
 	username := middleware.CurrentUsername(c)
 	if username == "" {

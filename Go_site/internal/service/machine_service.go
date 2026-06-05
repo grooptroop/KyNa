@@ -35,6 +35,9 @@ type CreateMachineInput struct {
 	Image           string
 	ContainerPort   int
 	ServicePort     int
+	AccessScope     string
+	EnableIngress   bool
+	IngressHost     string
 }
 
 type DeleteMachineInput struct {
@@ -88,6 +91,16 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		svcPort = in.ServicePort
 	}
 
+	var ingressHostPtr *string
+	if in.EnableIngress && in.IngressHost != "" {
+		ingressHostPtr = &in.IngressHost
+	}
+
+	accessScope := in.AccessScope
+	if accessScope != "internal" && accessScope != "public" {
+		accessScope = "internal"
+	}
+
 	m := &model.UserMachine{
 		Username:        in.Username,
 		Name:            in.Name,
@@ -95,6 +108,8 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		ServiceKind:     serviceKind,
 		Status:          model.MachineStatusPending,
 		ResourcesPreset: resources,
+		IngressHost:     ingressHostPtr,
+		AccessScope:     accessScope,
 	}
 
 	if err := s.repo.Create(ctx, m); err != nil {
@@ -110,20 +125,37 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 	}
 
 	svcEnabled := true
-	svcType := "LoadBalancer"
+	svcType := "ClusterIP"
 	ingressEnabled := false
 
 	switch serviceKind {
 	case "web":
-		svcEnabled = true
-		svcType = "LoadBalancer"
+		if accessScope == "public" {
+			svcType = "LoadBalancer"
+		} else {
+			svcType = "ClusterIP"
+		}
 		svcPort = containerPort
 		ingressEnabled = false
+
 	case "api":
-		svcEnabled = true
-		svcType = "ClusterIP"
+		if accessScope == "public" {
+			if in.EnableIngress && in.IngressHost != "" {
+				// public + ingress: ClusterIP + Ingress
+				svcType = "ClusterIP"
+				ingressEnabled = true
+			} else {
+				// public без ingress: LoadBalancer
+				svcType = "LoadBalancer"
+				ingressEnabled = false
+			}
+		} else {
+			// internal
+			svcType = "ClusterIP"
+			ingressEnabled = false
+		}
 		svcPort = containerPort
-		ingressEnabled = false
+
 	case "worker":
 		svcEnabled = false
 		ingressEnabled = false
@@ -191,6 +223,11 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		"--set", fmt.Sprintf("resources.limits.cpu=%s", cpuLimit),
 		"--set", fmt.Sprintf("resources.limits.memory=%s", memLimit),
 	}
+	if in.IngressHost != "" {
+		args = append(args,
+			"--set", fmt.Sprintf("ingress.host=%s", in.IngressHost),
+		)
+	}
 
 	cmd := exec.CommandContext(ctx, "helm", args...)
 
@@ -200,8 +237,30 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		return m, nil
 	}
 
-	svcName := fmt.Sprintf("hello-%s-%s", m.Username, m.Name)
+	svcName := fmt.Sprintf("%s-%s", m.Username, m.Name)
+	ns = m.Username
 
+	// ClusterIP
+	clusterIPCmd := exec.CommandContext(
+		ctx,
+		"kubectl",
+		"get",
+		"svc",
+		svcName,
+		"-n", ns,
+		"-o", "jsonpath={.spec.clusterIP}",
+	)
+
+	clusterIPOut, clusterIPErr := clusterIPCmd.CombinedOutput()
+	clusterIP := strings.TrimSpace(string(clusterIPOut))
+	if clusterIPErr != nil {
+		log.Printf("kubectl get svc cluster ip for machine failed: %v, output: %s", clusterIPErr, string(clusterIPOut))
+	}
+	if clusterIP != "" {
+		m.ClusterIP = &clusterIP
+	}
+
+	// External IP (для LoadBalancer)
 	ipCmd := exec.CommandContext(
 		ctx,
 		"kubectl",
@@ -217,26 +276,25 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 	if ipErr != nil {
 		log.Printf("kubectl get svc external ip for machine failed: %v, output: %s", ipErr, string(ipOut))
 	}
-
 	if externalIP != "" {
 		m.ExternalIP = &externalIP
-		m.Status = model.MachineStatusReady
-		if err := s.repo.UpdateStatusAndIP(ctx, m.ID, m.Status, m.ExternalIP); err != nil {
-			log.Printf("failed to update machine status/ip in db: %v", err)
-		}
 	}
 
-	// проверка CrashLoopBackOff
+	// Статус по CrashLoopBackOff
 	crash, _ := s.checkPodCrashLoop(ctx, m.Username, m.Name)
 	if crash {
 		m.Status = model.MachineStatusFailed
-		if err := s.repo.UpdateStatusAndIP(ctx, m.ID, m.Status, m.ExternalIP); err != nil {
-			log.Printf("failed to update machine status to failed: %v", err)
-		}
+	} else {
+		m.Status = model.MachineStatusReady
 	}
 
-	log.Printf("DEBUG: MachineService.CreateMachine end id=%d status=%s ip=%v",
-		m.ID, m.Status, m.ExternalIP)
+	// Пока в репозитории есть только UpdateStatusAndIP — используем его, ClusterIP уже лежит в m и пойдёт в ListByUsername
+	if err := s.repo.UpdateStatusAndIP(ctx, m.ID, m.Status, m.ExternalIP); err != nil {
+		log.Printf("failed to update machine status/ip in db: %v", err)
+	}
+
+	log.Printf("DEBUG: MachineService.CreateMachine end id=%d status=%s external_ip=%v cluster_ip=%v",
+		m.ID, m.Status, m.ExternalIP, m.ClusterIP)
 
 	return m, nil
 }
@@ -298,7 +356,7 @@ func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInpu
 
 func (s *MachineService) checkPodCrashLoop(ctx context.Context, username, name string) (bool, error) {
 	ns := username
-	labelSelector := fmt.Sprintf("app=hello-%s-%s", username, name)
+	labelSelector := fmt.Sprintf("app=%s-%s", username, name)
 
 	cmd := exec.CommandContext(
 		ctx,
@@ -311,7 +369,6 @@ func (s *MachineService) checkPodCrashLoop(ctx context.Context, username, name s
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("checkPodCrashLoop kubectl error: %v, out=%s", err, string(out))
-		// не считаем это фатальной ошибкой: просто говорим, что краша не знаем
 		return false, nil
 	}
 

@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS user_provisions (
     mode        TEXT NOT NULL,
     status      TEXT NOT NULL DEFAULT 'pending',
     external_ip TEXT,
+    access_scope TEXT,
+    cluster_ip TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -32,6 +34,7 @@ CREATE TABLE IF NOT EXISTS user_machines (
     version      TEXT,
     status       TEXT NOT NULL DEFAULT 'pending',
     external_ip  TEXT,
+    ingress_host text,
     resources_preset TEXT NOT NULL DEFAULT 'small',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()

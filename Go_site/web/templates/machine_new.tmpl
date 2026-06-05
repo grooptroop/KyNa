@@ -199,6 +199,66 @@
       font-size: 11px;
       color: var(--text-muted);
     }
+
+    /* Access toggle styles */
+    .access-toggle {
+      position: relative;
+      display: flex;
+      width: 240px;
+      background-color: #191b1f;
+      border-radius: 999px;
+      padding: 2px;
+      border: 1px solid var(--border-color);
+      overflow: hidden;
+    }
+
+    .access-toggle-slider {
+      position: absolute;
+      top: 2px;
+      bottom: 2px;
+      left: 2px;
+      width: calc(50% - 2px);
+      background-color: var(--accent);
+      border-radius: 999px;
+      transition: transform 0.2s ease-in-out;
+      z-index: 0;
+    }
+
+    .access-toggle.public-selected .access-toggle-slider {
+      transform: translateX(100%);
+    }
+
+    .access-option {
+      flex: 1 1 50%;
+      position: relative;
+      z-index: 1;
+    }
+
+    .access-option input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .access-option-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 4px 0;
+      font-size: 11px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.15s ease;
+      text-align: center;
+    }
+
+    .access-option input[type="radio"]:checked + .access-option-label {
+      color: #000;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -239,6 +299,26 @@
     <form method="post" action="/me/machines" id="machine-form">
       <div class="form-section">
         <div class="form-grid">
+
+          <!-- Access scope -->
+          <div class="form-field" id="access-field" style="display:none;">
+            <label class="form-label">Access</label>
+            <div class="access-toggle" id="access-toggle">
+              <div class="access-toggle-slider"></div>
+              <div class="access-option">
+                <input type="radio" name="access_scope" id="access-internal" value="internal" checked>
+                <label for="access-internal" class="access-option-label">Inside cluster</label>
+              </div>
+              <div class="access-option">
+                <input type="radio" name="access_scope" id="access-public" value="public">
+                <label for="access-public" class="access-option-label">Public</label>
+              </div>
+            </div>
+            <span class="hint">
+              Internal: only inside Kubernetes cluster. Public: accessible from outside.
+            </span>
+          </div>
+
           <div class="form-field">
             <label class="form-label">Selected service</label>
             <input type="text" class="form-input" id="service-kind-display" value="" placeholder="Choose a service above" disabled>
@@ -250,7 +330,6 @@
             <input type="text" name="name" class="form-input" id="machine-name" placeholder="e.g. my-app" required>
             <span class="hint">Will be used in resource name: hello-&lt;username&gt;-&lt;name&gt;</span>
           </div>
-
 
           <div class="form-field">
             <label class="form-label">Resources</label>
@@ -265,7 +344,7 @@
           <div class="form-field">
             <label class="form-label">Image (optional)</label>
             <input type="text" name="image" class="form-input" id="machine-image"
-                  placeholder="e.g. nginx:stable-alpine or ghcr.io/user/app:v1.0.2">
+                   placeholder="e.g. nginx:stable-alpine or ghcr.io/user/app:v1.0.2">
             <span class="hint">If empty, we use a default image for this preset.</span>
           </div>
 
@@ -294,6 +373,30 @@
               Port exposed by the Kubernetes Service (defaults to same as container port).
             </span>
           </div>
+
+          <!-- Ingress toggle (only for API + public) -->
+          <div class="form-field" id="ingress-options" style="display:none;">
+            <label class="form-label">
+              <input type="checkbox" name="enable_ingress" id="enable-ingress">
+              Expose via Ingress (DNS)
+            </label>
+            <span class="hint">
+              When enabled, traffic goes through Traefik by DNS host.
+            </span>
+          </div>
+
+          <div class="form-field" id="ingress-host-field" style="display:none;">
+            <label class="form-label" for="ingress-host">DNS name (host)</label>
+            <input type="text"
+                   name="ingress_host"
+                   id="ingress-host"
+                   class="form-input"
+                   placeholder="e.g. api-<username>.kyna.local">
+            <span class="hint">
+              Required when Ingress is enabled. Must resolve to your server IP.
+            </span>
+          </div>
+
         </div>
 
         <div class="actions">
@@ -313,6 +416,15 @@
       const containerPortInput = document.getElementById('container-port');
       const servicePortInput = document.getElementById('service-port');
 
+      const accessField = document.getElementById('access-field');
+      const accessInternal = document.getElementById('access-internal');
+      const accessPublic = document.getElementById('access-public');
+      const accessToggle = document.getElementById('access-toggle');
+
+      const ingressOptions = document.getElementById('ingress-options');
+      const ingressToggle = document.getElementById('enable-ingress');
+      const ingressHostField = document.getElementById('ingress-host-field');
+
       function setDefaultsForKind(kind) {
         if (kind === 'web') {
           if (!containerPortInput.value || containerPortInput.value === '8080') {
@@ -329,15 +441,62 @@
             servicePortInput.value = 8080;
           }
         } else if (kind === 'worker') {
+          // worker: порты можно оставить как есть
+        }
+      }
+
+      function updateFormForKind(kind) {
+        const isApi = kind === 'api';
+
+        if (isApi) {
+          accessField.style.display = 'flex';
+        } else {
+          accessField.style.display = 'none';
+          if (accessInternal) {
+            accessInternal.checked = true;
+          }
+          if (accessPublic) {
+            accessPublic.checked = false;
+          }
+        }
+
+        updateIngressVisibility();
+        updateAccessSlider();
+      }
+
+      function updateIngressVisibility() {
+        const kind = serviceKindInput.value;
+        const isApi = kind === 'api';
+        const isPublic = accessPublic && accessPublic.checked;
+
+        if (isApi && isPublic) {
+          ingressOptions.style.display = 'flex';
+          if (ingressToggle.checked) {
+            ingressHostField.style.display = 'flex';
+          } else {
+            ingressHostField.style.display = 'none';
+          }
+        } else {
+          ingressOptions.style.display = 'none';
+          ingressHostField.style.display = 'none';
+          if (ingressToggle) {
+            ingressToggle.checked = false;
+          }
+        }
+      }
+
+      function updateAccessSlider() {
+        if (!accessToggle || !accessPublic) return;
+        if (accessPublic.checked) {
+          accessToggle.classList.add('public-selected');
+        } else {
+          accessToggle.classList.remove('public-selected');
         }
       }
 
       cards.forEach(card => {
         card.addEventListener('click', () => {
-          // снять выделение со всех
           cards.forEach(c => c.classList.remove('selected'));
-
-          // выделить текущую
           card.classList.add('selected');
 
           const kind = card.getAttribute('data-service');
@@ -351,8 +510,28 @@
           }
 
           setDefaultsForKind(kind);
+          updateFormForKind(kind);
         });
       });
+
+      if (accessInternal && accessPublic) {
+        accessInternal.addEventListener('change', () => {
+          updateAccessSlider();
+          updateIngressVisibility();
+        });
+        accessPublic.addEventListener('change', () => {
+          updateAccessSlider();
+          updateIngressVisibility();
+        });
+        updateAccessSlider();
+      }
+
+      if (ingressToggle) {
+        ingressToggle.addEventListener('change', updateIngressVisibility);
+      }
+
+      // начальное состояние
+      updateFormForKind(serviceKindInput.value || '');
     })();
   </script>
 </body>

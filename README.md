@@ -13,6 +13,8 @@ Kyna - Платформа для автоматического развёрты
 - helm
 - ansible 
 - metalLB
+- traefik
+- ExternalDNS
 
 
 [документация по установке](/md-files/instruction.md)

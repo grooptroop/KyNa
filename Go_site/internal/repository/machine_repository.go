@@ -15,6 +15,7 @@ type MachineRepository struct {
 func NewMachineRepository(pool *pgxpool.Pool) *MachineRepository {
 	return &MachineRepository{pool: pool}
 }
+
 func (r *MachineRepository) ListByUsername(ctx context.Context, username string) ([]model.UserMachine, error) {
 	rows, err := r.pool.Query(ctx, `
         SELECT
@@ -25,7 +26,10 @@ func (r *MachineRepository) ListByUsername(ctx context.Context, username string)
             service_kind,
             status,
             external_ip,
+            cluster_ip,
+            ingress_host,
             resources_preset,
+            access_scope,
             created_at,
             updated_at
         FROM user_machines
@@ -49,7 +53,10 @@ func (r *MachineRepository) ListByUsername(ctx context.Context, username string)
 			&m.ServiceKind,
 			&m.Status,
 			&m.ExternalIP,
+			&m.ClusterIP,
+			&m.IngressHost,
 			&m.ResourcesPreset,
+			&m.AccessScope,
 			&m.CreatedAt,
 			&m.UpdatedAt,
 		); err != nil {
@@ -72,24 +79,30 @@ func (r *MachineRepository) Create(ctx context.Context, m *model.UserMachine) er
 	}
 
 	err := r.pool.QueryRow(ctx, `
-    INSERT INTO user_machines (
-        username,
-        name,
-        mode,
-        service_kind,
-        status,
-        external_ip,
-        resources_preset
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
-    RETURNING id, created_at, updated_at`,
+        INSERT INTO user_machines (
+            username,
+            name,
+            mode,
+            service_kind,
+            status,
+            external_ip,
+            cluster_ip,
+            ingress_host,
+            resources_preset,
+            access_scope
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id, created_at, updated_at`,
 		m.Username,
 		m.Name,
 		m.Mode,
 		m.ServiceKind,
 		m.Status,
 		m.ExternalIP,
-		m.ResourcesPreset, // вот это важное поле
+		m.ClusterIP,
+		m.IngressHost,
+		m.ResourcesPreset,
+		m.AccessScope,
 	).Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert user_machines: %w", err)
@@ -115,7 +128,6 @@ func (r *MachineRepository) UpdateStatusAndIP(
 	return nil
 }
 
-// DeleteByID удаляет машинку по id и username (чтобы не удалить чужую)
 func (r *MachineRepository) DeleteByID(ctx context.Context, id int64, username string) error {
 	cmdTag, err := r.pool.Exec(ctx, `
         DELETE FROM user_machines
@@ -127,6 +139,25 @@ func (r *MachineRepository) DeleteByID(ctx context.Context, id int64, username s
 	}
 	if cmdTag.RowsAffected() == 0 {
 		return fmt.Errorf("delete machine: no rows affected")
+	}
+	return nil
+}
+
+func (r *MachineRepository) UpdateStatusIPAndHost(
+	ctx context.Context,
+	id int64,
+	status model.MachineStatus,
+	externalIP *string,
+	ingressHost *string,
+) error {
+	_, err := r.pool.Exec(ctx, `
+        UPDATE user_machines
+        SET status = $2, external_ip = $3, ingress_host = $4, updated_at = now()
+        WHERE id = $1`,
+		id, status, externalIP, ingressHost,
+	)
+	if err != nil {
+		return fmt.Errorf("update user_machines status/ip/host: %w", err)
 	}
 	return nil
 }

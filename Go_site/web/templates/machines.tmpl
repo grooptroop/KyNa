@@ -85,7 +85,7 @@
       background-color: #202228;
     }
 
-    .col-ip { width: 160px; }
+    .col-ip { width: 220px; }
     .col-actions { width: 120px; }
 
     .tag {
@@ -140,6 +140,7 @@
       border-radius: 999px;
       border: 1px solid var(--border-color);
       color: var(--text-main);
+      white-space: nowrap;
     }
 
     .ip-pill-muted {
@@ -229,7 +230,7 @@
           <th>Service</th>
           <th>Status</th>
           <th>Resources</th>
-          <th class="col-ip">External IP</th>
+          <th class="col-ip">Address</th>
           <th class="col-actions">Actions</th>
         </tr>
         {{ range .Machines }}
@@ -264,6 +265,7 @@
               </span>
             {{ end }}
           </td>
+
           <td>
             <span class="tag">
               {{ if eq .ResourcesPreset "small" }}
@@ -275,12 +277,28 @@
               {{ else }}
                 • {{ .ResourcesPreset }}
               {{ end }}
-            </span> 
+            </span>
           </td>
+
           <td>
             {{ if .ExternalIP }}
-              <span class="ip-pill">{{ .ExternalIP }}</span>
+              {{ if .IngressHost }}
+                <!-- public + ingress + есть ExternalIP -->
+                <span class="ip-pill">{{ .IngressHost }} / {{ .ExternalIP }}</span>
+              {{ else }}
+                <!-- public без ingress: чистый external IP -->
+                <span class="ip-pill">{{ .ExternalIP }}</span>
+              {{ end }}
+            {{ else if .IngressHost }}
+              <!-- public + ingress, DNS без внешнего IP -->
+              <span class="ip-pill">{{ .IngressHost }}</span>
+            {{ else if eq .AccessScope "internal" }}
+              <!-- internal only: показываем DNS внутри кластера -->
+              <span class="ip-pill">
+                {{ .Username }}-{{ .Name }}.{{ .Username }}
+              </span>
             {{ else }}
+              <!-- public, но пока нет external IP (LB pending) -->
               <span class="ip-pill-muted">waiting...</span>
             {{ end }}
           </td>

@@ -26,7 +26,9 @@ resources:
 
 ingress:
   enabled: false
-  className: "nginx"
+  className: ""
+  host: ""
+  path: /
 
 service: 
   enabled: true 

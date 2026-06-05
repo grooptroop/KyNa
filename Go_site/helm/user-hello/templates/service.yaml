@@ -2,15 +2,15 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: hello-{{ .Values.username }}-{{ .Values.name }}
+  name: {{ .Values.username }}-{{ .Values.name }}
   labels:
-    app: hello-{{ .Values.username }}-{{ .Values.name }}
+    app: {{ .Values.username }}-{{ .Values.name }}
   annotations:
     metallb.io/address-pool: {{ .Values.metallb.addressPool | quote }}
 spec:
   type: {{ .Values.service.type | default "LoadBalancer" }}
   selector:
-    app: hello-{{ .Values.username }}-{{ .Values.name }}
+    app: {{ .Values.username }}-{{ .Values.name }}
   ports:
     - name: http
       port: {{ .Values.service.port | default 80 }}

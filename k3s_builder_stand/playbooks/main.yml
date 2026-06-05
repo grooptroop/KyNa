@@ -7,4 +7,5 @@
   hosts: k3s_server
   roles: 
     - networking_lb
-    
+    - role: external_dns
+      tags: []

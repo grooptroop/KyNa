@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hello-{{ .Values.username }}-{{ .Values.name }}
+  name: {{ .Values.username }}-{{ .Values.name }}
   labels:
-    app: hello-{{ .Values.username }}-{{ .Values.name }}
+    app: {{ .Values.username }}-{{ .Values.name }}
     service-kind: {{ .Values.serviceKind | default "web" }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: hello-{{ .Values.username }}-{{ .Values.name }}
+      app: {{ .Values.username }}-{{ .Values.name }}
   template:
     metadata:
       labels:
-        app: hello-{{ .Values.username }}-{{ .Values.name }}
+        app: {{ .Values.username }}-{{ .Values.name }}
         service-kind: {{ .Values.serviceKind | default "web" }}
     spec:
       containers:
-        - name: hello
+        - name: app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPloicy | default "IfNotPresent" }}          
           ports:
