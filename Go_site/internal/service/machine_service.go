@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/grooptroop/KyNa/Go_site/internal/model"
@@ -38,6 +40,7 @@ type CreateMachineInput struct {
 	AccessScope     string
 	EnableIngress   bool
 	IngressHost     string
+	ImageTarPath    string
 }
 
 type DeleteMachineInput struct {
@@ -130,27 +133,20 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 
 	switch serviceKind {
 	case "web":
-		if accessScope == "public" {
-			svcType = "LoadBalancer"
-		} else {
-			svcType = "ClusterIP"
-		}
+		svcType = "LoadBalancer"
 		svcPort = containerPort
 		ingressEnabled = false
 
 	case "api":
 		if accessScope == "public" {
 			if in.EnableIngress && in.IngressHost != "" {
-				// public + ingress: ClusterIP + Ingress
 				svcType = "ClusterIP"
 				ingressEnabled = true
 			} else {
-				// public без ingress: LoadBalancer
 				svcType = "LoadBalancer"
 				ingressEnabled = false
 			}
 		} else {
-			// internal
 			svcType = "ClusterIP"
 			ingressEnabled = false
 		}
@@ -182,7 +178,26 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 	imgRepo := "nginx"
 	imgTag := "stable-alpine"
 
-	if in.Image != "" {
+	if in.ImageTarPath != "" {
+		loadedImage, err := loadDockerImageFromTar(ctx, in.ImageTarPath)
+		if err != nil {
+			log.Printf("failed to load docker image from tar %s: %v", in.ImageTarPath, err)
+			return nil, fmt.Errorf("failed to load docker image: %w", err)
+		}
+
+		parts := strings.Split(loadedImage, ":")
+		if len(parts) == 2 {
+			imgRepo = parts[0]
+			imgTag = parts[1]
+		} else {
+			imgRepo = loadedImage
+		}
+
+		if err := os.Remove(in.ImageTarPath); err != nil {
+			log.Printf("failed to remove temp tar %s: %v", in.ImageTarPath, err)
+		}
+
+	} else if in.Image != "" {
 		parts := strings.Split(in.Image, ":")
 		if len(parts) == 2 {
 			imgRepo = parts[0]
@@ -229,6 +244,8 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		)
 	}
 
+	log.Printf("DEBUG: using image %s:%s for machine %s/%s", imgRepo, imgTag, m.Username, m.Name)
+	log.Printf("DEBUG: helm args: %v", args)
 	cmd := exec.CommandContext(ctx, "helm", args...)
 
 	out, err := cmd.CombinedOutput()
@@ -240,7 +257,6 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 	svcName := fmt.Sprintf("%s-%s", m.Username, m.Name)
 	ns = m.Username
 
-	// ClusterIP
 	clusterIPCmd := exec.CommandContext(
 		ctx,
 		"kubectl",
@@ -260,7 +276,6 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		m.ClusterIP = &clusterIP
 	}
 
-	// External IP (для LoadBalancer)
 	ipCmd := exec.CommandContext(
 		ctx,
 		"kubectl",
@@ -280,7 +295,6 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		m.ExternalIP = &externalIP
 	}
 
-	// Статус по CrashLoopBackOff
 	crash, _ := s.checkPodCrashLoop(ctx, m.Username, m.Name)
 	if crash {
 		m.Status = model.MachineStatusFailed
@@ -288,7 +302,6 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		m.Status = model.MachineStatusReady
 	}
 
-	// Пока в репозитории есть только UpdateStatusAndIP — используем его, ClusterIP уже лежит в m и пойдёт в ListByUsername
 	if err := s.repo.UpdateStatusAndIP(ctx, m.ID, m.Status, m.ExternalIP); err != nil {
 		log.Printf("failed to update machine status/ip in db: %v", err)
 	}
@@ -374,4 +387,34 @@ func (s *MachineService) checkPodCrashLoop(ctx context.Context, username, name s
 
 	reason := strings.TrimSpace(string(out))
 	return reason == "CrashLoopBackOff", nil
+}
+
+func loadDockerImageFromTar(ctx context.Context, tarPath string) (string, error) {
+	if tarPath == "" {
+		return "", fmt.Errorf("empty tar path")
+
+	}
+
+	cmd := exec.CommandContext(ctx, "docker", "image", "load", "-i", tarPath)
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("docker load failed: %w, stderr: %s", err, stderr.String())
+	}
+
+	out := stdout.String()
+
+	re := regexp.MustCompile(`Loaded image: ([^\s]+)`)
+	m := re.FindStringSubmatch(out)
+	if len(m) < 2 {
+		return "", fmt.Errorf("cannot parse loaded image from output: %q", out)
+	}
+
+	imageName := m[1]
+	log.Printf("DEBUG: docker load output: %s", out)
+	log.Printf("loaded docker image from tar %s: %s", tarPath, imageName)
+	return imageName, nil
 }

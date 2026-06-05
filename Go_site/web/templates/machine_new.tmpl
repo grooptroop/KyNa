@@ -124,9 +124,17 @@
       border-top: 1px solid var(--border-color);
     }
 
+    /* Контейнер для левой формы и правого блока Images */
+    .form-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(260px, 0.9fr);
+      gap: 16px;
+      align-items: flex-start;
+    }
+
     .form-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(200px, 1fr));
+      grid-template-columns: repeat(3, minmax(180px, 1fr)); /* было 4, стало 3 колонки */
       gap: 12px;
       margin-bottom: 16px;
     }
@@ -259,6 +267,90 @@
       color: #000;
       font-weight: 600;
     }
+
+    /* TAR dropzone styles */
+    .tar-dropzone {
+      position: relative;
+      border-radius: 8px;
+      border: 1px dashed var(--border-color);
+      background-color: #191b1f;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .tar-dropzone:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(82, 227, 106, 0.25);
+      background-color: #1f2025;
+    }
+
+    .tar-dropzone.drag-over {
+      border-color: var(--accent);
+      background-color: #1c2320;
+      box-shadow: 0 0 0 1px rgba(82, 227, 106, 0.4);
+    }
+
+    .tar-file-input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .tar-dropzone-content {
+      pointer-events: none;
+    }
+
+    .tar-dropzone-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .tar-dropzone-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .tar-dropzone-filename {
+      font-size: 11px;
+      color: var(--accent);
+      margin-top: 6px;
+      word-break: break-all;
+    }
+
+    /* Правый блок Images */
+    .image-panel {
+      background-color: #191b1f;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .image-panel-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    @media (max-width: 1100px) {
+      .form-layout {
+        grid-template-columns: 1fr;
+      }
+      .image-panel {
+        margin-top: 8px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -296,107 +388,137 @@
     </div>
 
     <!-- Форма конфигурации -->
-    <form method="post" action="/me/machines" id="machine-form">
+    <form method="post" action="/me/machines" id="machine-form" enctype="multipart/form-data">
       <div class="form-section">
-        <div class="form-grid">
 
-          <!-- Access scope -->
-          <div class="form-field" id="access-field" style="display:none;">
-            <label class="form-label">Access</label>
-            <div class="access-toggle" id="access-toggle">
-              <div class="access-toggle-slider"></div>
-              <div class="access-option">
-                <input type="radio" name="access_scope" id="access-internal" value="internal" checked>
-                <label for="access-internal" class="access-option-label">Inside cluster</label>
+        <div class="form-layout">
+          <!-- Левая часть: основная форма -->
+          <div>
+            <div class="form-grid">
+
+              <!-- Access scope -->
+              <div class="form-field" id="access-field">
+                <label class="form-label">Access</label>
+                <div class="access-toggle" id="access-toggle">
+                  <div class="access-toggle-slider"></div>
+                  <div class="access-option">
+                    <input type="radio" name="access_scope" id="access-internal" value="internal" checked>
+                    <label for="access-internal" class="access-option-label">Inside cluster</label>
+                  </div>
+                  <div class="access-option">
+                    <input type="radio" name="access_scope" id="access-public" value="public">
+                    <label for="access-public" class="access-option-label">Public</label>
+                  </div>
+                </div>
+                <span class="hint">
+                  Internal: only inside Kubernetes cluster. Public: accessible from outside.
+                </span>
               </div>
-              <div class="access-option">
-                <input type="radio" name="access_scope" id="access-public" value="public">
-                <label for="access-public" class="access-option-label">Public</label>
+
+              <div class="form-field">
+                <label class="form-label">Selected service</label>
+                <input type="text" class="form-input" id="service-kind-display" value="" placeholder="Choose a service above" disabled>
+                <input type="hidden" name="service_kind" id="service-kind">
               </div>
+
+              <div class="form-field">
+                <label class="form-label">Machine name</label>
+                <input type="text" name="name" class="form-input" id="machine-name" placeholder="e.g. my-app" required>
+                <span class="hint">Will be used in resource name: hello-&lt;username&gt;-&lt;name&gt;</span>
+              </div>
+
+              <div class="form-field">
+                <label class="form-label">Resources</label>
+                <select name="resources_preset" class="form-select" id="resources-preset">
+                  <option value="small" selected>Small (50m CPU / 64Mi RAM)</option>
+                  <option value="medium">Medium (100m CPU / 128Mi RAM)</option>
+                  <option value="large">Large (250m CPU / 256Mi RAM)</option>
+                </select>
+                <span class="hint">Controls CPU and memory for the pod.</span>
+              </div>
+
+              <div class="form-field">
+                <label class="form-label">Container port</label>
+                <input type="number"
+                       name="container_port"
+                       id="container-port"
+                       class="form-input"
+                       min="1" max="65535"
+                       value="80">
+                <span class="hint">
+                  Port your app listens on inside the container (80 for Web, 8080 for API by default).
+                </span>
+              </div>
+
+              <div class="form-field">
+                <label class="form-label">Service port</label>
+                <input type="number"
+                       name="service_port"
+                       id="service-port"
+                       class="form-input"
+                       min="1" max="65535"
+                       value="80">
+                <span class="hint">
+                  Port exposed by the Kubernetes Service (defaults to same as container port).
+                </span>
+              </div>
+
+              <!-- Ingress toggle -->
+              <div class="form-field" id="ingress-options">
+                <label class="form-label">
+                  <input type="checkbox" name="enable_ingress" id="enable-ingress">
+                  Expose via Ingress (DNS)
+                </label>
+                <span class="hint">
+                  When enabled, traffic goes through Traefik by DNS host.
+                </span>
+              </div>
+
+              <div class="form-field" id="ingress-host-field">
+                <label class="form-label" for="ingress-host">DNS name (host)</label>
+                <input type="text"
+                       name="ingress_host"
+                       id="ingress-host"
+                       class="form-input"
+                       placeholder="e.g. api-<username>.kyna.local">
+                <span class="hint">
+                  Required when Ingress is enabled. Must resolve to your server IP.
+                </span>
+              </div>
+
             </div>
-            <span class="hint">
-              Internal: only inside Kubernetes cluster. Public: accessible from outside.
-            </span>
           </div>
 
-          <div class="form-field">
-            <label class="form-label">Selected service</label>
-            <input type="text" class="form-input" id="service-kind-display" value="" placeholder="Choose a service above" disabled>
-            <input type="hidden" name="service_kind" id="service-kind">
-          </div>
+          <!-- Правая часть: отдельный блок Images -->
+          <div class="image-panel">
+            <div class="image-panel-title">Images</div>
 
-          <div class="form-field">
-            <label class="form-label">Machine name</label>
-            <input type="text" name="name" class="form-input" id="machine-name" placeholder="e.g. my-app" required>
-            <span class="hint">Will be used in resource name: hello-&lt;username&gt;-&lt;name&gt;</span>
-          </div>
+            <div class="form-field">
+              <label class="form-label">Image (optional)</label>
+              <input type="text" name="image" class="form-input" id="machine-image"
+                     placeholder="e.g. nginx:stable-alpine or ghcr.io/user/app:v1.0.2">
+              <span class="hint">If empty, we use a default image for this preset.</span>
+            </div>
 
-          <div class="form-field">
-            <label class="form-label">Resources</label>
-            <select name="resources_preset" class="form-select" id="resources-preset">
-              <option value="small" selected>Small (50m CPU / 64Mi RAM)</option>
-              <option value="medium">Medium (100m CPU / 128Mi RAM)</option>
-              <option value="large">Large (250m CPU / 256Mi RAM)</option>
-            </select>
-            <span class="hint">Controls CPU and memory for the pod.</span>
+            <div class="form-field">
+              <label class="form-label">Docker image (.tar)</label>
+              <div id="tar-dropzone" class="tar-dropzone">
+                <input type="file"
+                       name="image_tar"
+                       id="image-tar-input"
+                       class="tar-file-input"
+                       accept=".tar,.tar.gz,.tgz,.tar.zst,.tar.bz2">
+                <div class="tar-dropzone-content">
+                  <div class="tar-dropzone-title">Drop .tar file here</div>
+                  <div class="tar-dropzone-subtitle">…or click to choose from disk</div>
+                  <div class="tar-dropzone-filename" id="tar-filename">No file selected</div>
+                </div>
+              </div>
+              <span class="hint">
+                Export via: docker save -o my-image.tar your-image:tag, then upload this file.
+              </span>
+            </div>
           </div>
-
-          <div class="form-field">
-            <label class="form-label">Image (optional)</label>
-            <input type="text" name="image" class="form-input" id="machine-image"
-                   placeholder="e.g. nginx:stable-alpine or ghcr.io/user/app:v1.0.2">
-            <span class="hint">If empty, we use a default image for this preset.</span>
-          </div>
-
-          <div class="form-field">
-            <label class="form-label">Container port</label>
-            <input type="number"
-                   name="container_port"
-                   id="container-port"
-                   class="form-input"
-                   min="1" max="65535"
-                   value="80">
-            <span class="hint">
-              Port your app listens on inside the container (80 for Web, 8080 for API by default).
-            </span>
-          </div>
-
-          <div class="form-field">
-            <label class="form-label">Service port</label>
-            <input type="number"
-                   name="service_port"
-                   id="service-port"
-                   class="form-input"
-                   min="1" max="65535"
-                   value="80">
-            <span class="hint">
-              Port exposed by the Kubernetes Service (defaults to same as container port).
-            </span>
-          </div>
-
-          <!-- Ingress toggle (only for API + public) -->
-          <div class="form-field" id="ingress-options" style="display:none;">
-            <label class="form-label">
-              <input type="checkbox" name="enable_ingress" id="enable-ingress">
-              Expose via Ingress (DNS)
-            </label>
-            <span class="hint">
-              When enabled, traffic goes through Traefik by DNS host.
-            </span>
-          </div>
-
-          <div class="form-field" id="ingress-host-field" style="display:none;">
-            <label class="form-label" for="ingress-host">DNS name (host)</label>
-            <input type="text"
-                   name="ingress_host"
-                   id="ingress-host"
-                   class="form-input"
-                   placeholder="e.g. api-<username>.kyna.local">
-            <span class="hint">
-              Required when Ingress is enabled. Must resolve to your server IP.
-            </span>
-          </div>
-
         </div>
 
         <div class="actions">
@@ -441,7 +563,7 @@
             servicePortInput.value = 8080;
           }
         } else if (kind === 'worker') {
-          // worker: порты можно оставить как есть
+          // worker: leave as is
         }
       }
 
@@ -528,6 +650,59 @@
 
       if (ingressToggle) {
         ingressToggle.addEventListener('change', updateIngressVisibility);
+      }
+
+      // --- TAR dropzone ---
+      const tarDropzone = document.getElementById('tar-dropzone');
+      const tarInput = document.getElementById('image-tar-input');
+      const tarFilename = document.getElementById('tar-filename');
+
+      if (tarDropzone && tarInput && tarFilename) {
+        const setFilename = (file) => {
+          if (!file) {
+            tarFilename.textContent = 'No file selected';
+            return;
+          }
+          tarFilename.textContent = file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+        };
+
+        tarInput.addEventListener('change', (e) => {
+          const file = e.target.files && e.target.files[0];
+          setFilename(file);
+        });
+
+        const preventDefaults = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        };
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+          tarDropzone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+          tarDropzone.addEventListener(eventName, () => {
+            tarDropzone.classList.add('drag-over');
+          }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+          tarDropzone.addEventListener(eventName, () => {
+            tarDropzone.classList.remove('drag-over');
+          }, false);
+        });
+
+        tarDropzone.addEventListener('drop', (e) => {
+          const dt = e.dataTransfer;
+          const files = dt.files;
+          if (files && files.length > 0) {
+            const file = files[0];
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            tarInput.files = dataTransfer.files;
+            setFilename(file);
+          }
+        });
       }
 
       // начальное состояние

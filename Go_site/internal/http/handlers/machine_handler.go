@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -62,8 +64,8 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		return
 	}
 
-	if err := c.Request.ParseForm(); err != nil {
-		c.String(http.StatusBadRequest, "invalid form")
+	if err := c.Request.ParseMultipartForm(2 << 50); err != nil {
+		c.String(http.StatusBadRequest, "invalid form: "+err.Error())
 		return
 	}
 
@@ -92,11 +94,6 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		resourcesPreset = "small"
 	}
 
-	log.Printf(
-		"CREATE MACHINE: user=%s service=%s name=%s version=%s resources=%s image=%s cport=%d sport=%d",
-		username, serviceKind, name, version, resourcesPreset, image, containerPort, servicePort,
-	)
-
 	enableIngress := c.PostForm("enable_ingress") == "on"
 	ingressHost := c.PostForm("ingress_host")
 
@@ -112,6 +109,38 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		}
 	}
 
+	var imageTarPath string
+	fileHeader, err := c.FormFile("image_tar")
+	if err == nil && fileHeader != nil && fileHeader.Size > 0 {
+
+		file, err := fileHeader.Open()
+		if err != nil {
+			c.String(http.StatusInternalServerError, "failed to open uploaded tar: "+err.Error())
+			return
+		}
+		defer file.Close()
+
+		tmpFile, err := os.CreateTemp("", "uploaded-image-*.tar")
+		if err != nil {
+			c.String(http.StatusInternalServerError, "failed to create temp file: "+err.Error())
+			return
+		}
+		defer tmpFile.Close()
+
+		if _, err := io.Copy(tmpFile, file); err != nil {
+			c.String(http.StatusInternalServerError, "failed to save uploaded tar: "+err.Error())
+			return
+		}
+
+		imageTarPath = tmpFile.Name()
+		log.Printf("uploaded docker tar saved as %s (%d bytes)", imageTarPath, fileHeader.Size)
+	}
+
+	log.Printf(
+		"CREATE MACHINE: user=%s service=%s name=%s version=%s resources=%s image=%s cport=%d sport=%d",
+		username, serviceKind, name, version, resourcesPreset, image, containerPort, servicePort,
+	)
+
 	in := service.CreateMachineInput{
 		Username:        username,
 		Name:            name,
@@ -124,9 +153,10 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		AccessScope:     accessScope,
 		EnableIngress:   enableIngress,
 		IngressHost:     ingressHost,
+		ImageTarPath:    imageTarPath,
 	}
 
-	_, err := h.svc.CreateMachine(c.Request.Context(), in)
+	_, err = h.svc.CreateMachine(c.Request.Context(), in)
 	if err != nil {
 		log.Printf("CREATE MACHINE ERROR: %v", err)
 		c.String(http.StatusInternalServerError, "failed to create machine")
