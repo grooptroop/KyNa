@@ -22,6 +22,9 @@ type UserMachine struct {
 	IngressHost     *string
 	ResourcesPreset string
 	AccessScope     string
+	ContainerPort   int
+	ServicePort     int
+	Image           *string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }

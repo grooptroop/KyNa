@@ -47,7 +47,6 @@ func (h *MachineHandler) ListMachines(c *gin.Context) {
 	c.HTML(http.StatusOK, "machines.tmpl", data)
 }
 
-// GET /me/machines/json — для polling
 func (h *MachineHandler) ListMachinesJSON(c *gin.Context) {
 	username := middleware.CurrentUsername(c)
 	if username == "" {
@@ -181,7 +180,121 @@ func (h *MachineHandler) CreateMachine(c *gin.Context) {
 		return
 	}
 
-	// Сразу редиректим на список машин — там уже крутится polling
+	c.Redirect(http.StatusSeeOther, "/me/machines")
+}
+
+func (h *MachineHandler) UpdateMachine(c *gin.Context) {
+	username := middleware.CurrentUsername(c)
+	if username == "" {
+		c.Redirect(http.StatusSeeOther, "/auth/login")
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	if err := c.Request.ParseMultipartForm(2 << 20); err != nil {
+		c.String(http.StatusBadRequest, "invalid form: "+err.Error())
+		return
+	}
+
+	serviceKind := c.PostForm("service_kind")
+	name := c.PostForm("name")
+	version := c.PostForm("version")
+	resourcesPreset := c.PostForm("resources_preset")
+	image := c.PostForm("image")
+
+	containerPortStr := c.PostForm("container_port")
+	servicePortStr := c.PostForm("service_port")
+
+	containerPort, _ := strconv.Atoi(containerPortStr)
+	servicePort, _ := strconv.Atoi(servicePortStr)
+
+	if serviceKind == "" {
+		c.String(http.StatusBadRequest, "service type is required")
+		return
+	}
+	if name == "" {
+		c.String(http.StatusBadRequest, "name is required")
+		return
+	}
+
+	if resourcesPreset == "" {
+		resourcesPreset = "small"
+	}
+
+	enableIngress := c.PostForm("enable_ingress") == "on"
+	ingressHost := c.PostForm("ingress_host")
+
+	accessScope := c.PostForm("access_scope")
+
+	if accessScope == "public" && serviceKind == "api" {
+		enableIngress = c.PostForm("enable_ingress") == "on"
+		if enableIngress {
+			ingressHost = strings.TrimSpace(c.PostForm("ingress_host"))
+			if ingressHost == "" {
+				enableIngress = false
+			}
+		}
+	}
+
+	var imageTarPath string
+	fileHeader, err := c.FormFile("image_tar")
+	if err == nil && fileHeader != nil && fileHeader.Size > 0 {
+		file, err := fileHeader.Open()
+		if err != nil {
+			c.String(http.StatusInternalServerError, "failed to open uploaded tar: "+err.Error())
+			return
+		}
+		defer file.Close()
+
+		tmpFile, err := os.CreateTemp("", "uploaded-image-*.tar")
+		if err != nil {
+			c.String(http.StatusInternalServerError, "failed to create temp file: "+err.Error())
+			return
+		}
+		defer tmpFile.Close()
+
+		if _, err := io.Copy(tmpFile, file); err != nil {
+			c.String(http.StatusInternalServerError, "failed to save uploaded tar: "+err.Error())
+			return
+		}
+
+		imageTarPath = tmpFile.Name()
+		log.Printf("uploaded docker tar saved as %s (%d bytes)", imageTarPath, fileHeader.Size)
+	}
+
+	log.Printf(
+		"UPDATE MACHINE: id=%d user=%s service=%s name=%s version=%s resources=%s image=%s cport=%d sport=%d",
+		id, username, serviceKind, name, version, resourcesPreset, image, containerPort, servicePort,
+	)
+
+	in := service.UpdateMachineInput{
+		ID:              id,
+		Username:        username,
+		Name:            name,
+		ServiceKind:     serviceKind,
+		Version:         version,
+		ResourcesPreset: resourcesPreset,
+		Image:           image,
+		ContainerPort:   containerPort,
+		ServicePort:     servicePort,
+		AccessScope:     accessScope,
+		EnableIngress:   enableIngress,
+		IngressHost:     ingressHost,
+		ImageTarPath:    imageTarPath,
+	}
+
+	if err := h.svc.UpdateMachine(c.Request.Context(), in); err != nil {
+		log.Printf("UPDATE MACHINE ERROR: %v", err)
+		c.String(http.StatusInternalServerError, "failed to update machine")
+		return
+	}
+
 	c.Redirect(http.StatusSeeOther, "/me/machines")
 }
 
@@ -264,4 +377,38 @@ func (h *MachineHandler) AdminDeleteMachine(c *gin.Context) {
 	}
 
 	c.Redirect(http.StatusSeeOther, "/admin/users/"+username+"/machines")
+}
+
+func (h *MachineHandler) ShowEditForm(c *gin.Context) {
+	username := middleware.CurrentUsername(c)
+	if username == "" {
+		c.Redirect(http.StatusSeeOther, "/auth/login")
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.String(http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	m, err := h.svc.GetMachine(c.Request.Context(), username, id)
+	if err != nil {
+		log.Printf("FAILED TO GET MACHINE: %v", err)
+		c.String(http.StatusNotFound, "machine not found")
+		return
+	}
+
+	data := struct {
+		Username string
+		Machine  *model.UserMachine
+		Mode     string
+	}{
+		Username: username,
+		Machine:  m,
+		Mode:     "edit",
+	}
+
+	c.HTML(http.StatusOK, "machine_new.tmpl", data)
 }

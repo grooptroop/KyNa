@@ -43,6 +43,22 @@ type CreateMachineInput struct {
 	ImageTarPath    string
 }
 
+type UpdateMachineInput struct {
+	ID              int64
+	Username        string
+	Name            string
+	ServiceKind     string
+	Version         string
+	ResourcesPreset string
+	Image           string
+	ContainerPort   int
+	ServicePort     int
+	AccessScope     string
+	EnableIngress   bool
+	IngressHost     string
+	ImageTarPath    string
+}
+
 type DeleteMachineInput struct {
 	ID       int64
 	Username string
@@ -53,7 +69,6 @@ func (s *MachineService) ListMachines(ctx context.Context, username string) ([]m
 	return s.repo.ListByUsername(ctx, username)
 }
 
-// JSON DTO для /me/machines/json
 type MachineJSON struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
@@ -66,7 +81,6 @@ type MachineJSON struct {
 	IngressHost *string `json:"ingress_host,omitempty"`
 }
 
-// Удобный метод для JSON‑эндпоинта.
 func (s *MachineService) ListMachinesJSON(ctx context.Context, username string) ([]MachineJSON, error) {
 	ms, err := s.repo.ListByUsername(ctx, username)
 	if err != nil {
@@ -137,6 +151,13 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		ResourcesPreset: resources,
 		IngressHost:     ingressHostPtr,
 		AccessScope:     accessScope,
+		ContainerPort:   in.ContainerPort,
+		ServicePort:     in.ServicePort,
+	}
+
+	if in.Image != "" {
+		img := in.Image
+		m.Image = &img
 	}
 
 	if err := s.repo.Create(ctx, m); err != nil {
@@ -147,18 +168,16 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 	log.Printf("DEBUG: Machine saved to DB id=%d username=%s name=%s serviceKind=%s resources=%s",
 		m.ID, m.Username, m.Name, m.ServiceKind, m.ResourcesPreset)
 
-	// если helmChartDir не задан — просто возвращаем pending‑машину
 	if s.helmChartDir == "" {
 		return m, nil
 	}
 
-	// копии для фоновой горутины
 	inCopy := in
 	mCopy := *m
 
 	go func() {
 		bg := context.Background()
-		s.provisionMachine(bg, &mCopy, inCopy)
+		s.provisionMachine(bg, &mCopy, inCopy, false)
 	}()
 
 	return m, nil
@@ -270,7 +289,7 @@ func loadDockerImageFromTar(ctx context.Context, tarPath string) (string, error)
 	return imageName, nil
 }
 
-func (s *MachineService) provisionMachine(ctx context.Context, m *model.UserMachine, in CreateMachineInput) {
+func (s *MachineService) provisionMachine(ctx context.Context, m *model.UserMachine, in CreateMachineInput, isUpgrade bool) {
 	log.Printf("DEBUG: provisionMachine start id=%d username=%s name=%s", m.ID, m.Username, m.Name)
 
 	serviceKind := m.ServiceKind
@@ -296,6 +315,11 @@ func (s *MachineService) provisionMachine(ctx context.Context, m *model.UserMach
 	accessScope := in.AccessScope
 	if accessScope != "internal" && accessScope != "public" {
 		accessScope = "internal"
+	}
+
+	cmdName := "install"
+	if isUpgrade {
+		cmdName = "upgrade"
 	}
 
 	switch serviceKind {
@@ -384,11 +408,18 @@ func (s *MachineService) provisionMachine(ctx context.Context, m *model.UserMach
 		}
 	}
 
+	finalImage := fmt.Sprintf("%s:%s", imgRepo, imgTag)
+	if err := s.repo.UpdateImage(ctx, m.ID, finalImage); err != nil {
+		log.Printf("failed to update machine image in db: %v", err)
+	} else {
+		m.Image = &finalImage
+	}
+
 	releaseName := fmt.Sprintf("machine-%s-%s", m.Username, m.Name)
 	ns := m.Username
 
 	args := []string{
-		"install",
+		cmdName,
 		releaseName,
 		s.helmChartDir,
 		"--namespace", ns,
@@ -414,6 +445,10 @@ func (s *MachineService) provisionMachine(ctx context.Context, m *model.UserMach
 		)
 	}
 
+	if isUpgrade {
+		args = append(args, "--install")
+	}
+
 	log.Printf("DEBUG: [async] using image %s:%s for machine %s/%s", imgRepo, imgTag, m.Username, m.Name)
 	log.Printf("DEBUG: [async] helm args: %v", args)
 
@@ -431,7 +466,6 @@ func (s *MachineService) provisionMachine(ctx context.Context, m *model.UserMach
 	svcName := fmt.Sprintf("%s-%s", m.Username, m.Name)
 	ns = m.Username
 
-	// clusterIP
 	clusterIPCmd := exec.CommandContext(
 		ctx,
 		"kubectl",
@@ -451,7 +485,6 @@ func (s *MachineService) provisionMachine(ctx context.Context, m *model.UserMach
 		m.ClusterIP = &clusterIP
 	}
 
-	// external IP
 	ipCmd := exec.CommandContext(
 		ctx,
 		"kubectl",
@@ -484,4 +517,110 @@ func (s *MachineService) provisionMachine(ctx context.Context, m *model.UserMach
 
 	log.Printf("DEBUG: provisionMachine end id=%d status=%s external_ip=%v cluster_ip=%v",
 		m.ID, m.Status, m.ExternalIP, m.ClusterIP)
+}
+
+func (s *MachineService) GetMachine(ctx context.Context, username string, id int64) (*model.UserMachine, error) {
+	machines, err := s.repo.ListByUsername(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+	for i := range machines {
+		if machines[i].ID == id {
+			return &machines[i], nil
+		}
+	}
+	return nil, fmt.Errorf("machine not found")
+}
+
+func (s *MachineService) UpdateMachine(ctx context.Context, in UpdateMachineInput) error {
+	if in.Username == "" {
+		return fmt.Errorf("UpdateMachine: empty username")
+	}
+	if in.ID == 0 {
+		return fmt.Errorf("UpdateMachine: empty id")
+	}
+
+	machines, err := s.repo.ListByUsername(ctx, in.Username)
+	if err != nil {
+		return fmt.Errorf("list machines: %w", err)
+	}
+
+	var m *model.UserMachine
+	for i := range machines {
+		if machines[i].ID == in.ID {
+			m = &machines[i]
+			break
+		}
+	}
+	if m == nil {
+		return fmt.Errorf("machine not found")
+	}
+
+	if in.Name != "" {
+		m.Name = in.Name
+	}
+	if in.ServiceKind != "" {
+		m.ServiceKind = in.ServiceKind
+	}
+	if in.ResourcesPreset != "" {
+		m.ResourcesPreset = in.ResourcesPreset
+	}
+
+	accessScope := in.AccessScope
+	if accessScope != "internal" && accessScope != "public" {
+		accessScope = "internal"
+	}
+	m.AccessScope = accessScope
+
+	var ingressHostPtr *string
+	if in.EnableIngress && in.IngressHost != "" {
+		ingressHostPtr = &in.IngressHost
+	}
+	m.IngressHost = ingressHostPtr
+
+	if in.ContainerPort > 0 {
+		m.ContainerPort = in.ContainerPort
+	}
+
+	if in.ServicePort > 0 {
+		m.ServicePort = in.ServicePort
+	}
+
+	if in.Image != "" {
+		img := in.Image
+		m.Image = &img
+	}
+
+	m.Status = model.MachineStatusPending
+
+	if err := s.repo.UpdateMetadata(ctx, m); err != nil {
+		return fmt.Errorf("update metadata: %w", err)
+	}
+
+	if s.helmChartDir == "" {
+		return nil
+	}
+
+	inCreate := CreateMachineInput{
+		Username:        in.Username,
+		Name:            m.Name,
+		ServiceKind:     m.ServiceKind,
+		Version:         in.Version,
+		ResourcesPreset: m.ResourcesPreset,
+		Image:           in.Image,
+		ContainerPort:   in.ContainerPort,
+		ServicePort:     in.ServicePort,
+		AccessScope:     m.AccessScope,
+		EnableIngress:   in.EnableIngress,
+		IngressHost:     in.IngressHost,
+		ImageTarPath:    in.ImageTarPath,
+	}
+
+	mCopy := *m
+	go func() {
+		bg := context.Background()
+		s.provisionMachine(bg, &mCopy, inCreate, true)
+	}()
+
+	return nil
 }

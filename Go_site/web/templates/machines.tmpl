@@ -296,8 +296,11 @@
               <span class="ip-pill-muted">waiting...</span>
             {{ end }}
           </td>
-
+          
           <td>
+            <a href="/me/machines/{{ .ID }}/edit" class="btn btn-sm btn-primary" style="margin-right: 4px;">
+              Edit
+            </a>
             <form action="/me/machines/{{ .ID }}/delete" method="post" style="display:inline;">
               <button type="submit" class="btn btn-danger btn-sm">
                 Delete

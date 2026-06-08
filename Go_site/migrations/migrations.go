@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS user_machines (
     status       TEXT NOT NULL DEFAULT 'pending',
     external_ip  TEXT,
     ingress_host text,
+    container_port integer,
+    service_port integer,
+    image text,
     resources_preset TEXT NOT NULL DEFAULT 'small',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
