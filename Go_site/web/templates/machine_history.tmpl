@@ -1,0 +1,185 @@
+{{ define "machines_history.tmpl" }}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>History - {{ .Username }}</title>
+  <style>
+    :root {
+      --bg-main: #0b0b0d;
+      --bg-card: #141416;
+      --bg-row-alt: #191b1f;
+      --border-color: #26282f;
+      --accent: #52e36a;
+      --accent-soft: #3ac458;
+      --text-main: #f5f5f7;
+      --text-muted: #a0a3ad;
+      --status-green: #2ecc71;
+      --status-yellow: #f1c40f;
+      --status-red: #e74c3c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .page-header-title {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .page-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.35);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 10px;
+      font-size: 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border-color);
+      cursor: pointer;
+      text-decoration: none;
+      background-color: transparent;
+      color: var(--text-muted);
+      transition: background-color 0.15s ease, transform 0.05s ease;
+    }
+
+    .btn:hover {
+      background-color: #1c1e23;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+
+    th, td {
+      padding: 8px 6px;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      text-align: left;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      font-size: 11px;
+    }
+
+    tr:nth-child(even) td {
+      background-color: var(--bg-row-alt);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid var(--border-color);
+    }
+
+    .badge-created { border-color: var(--status-green); color: var(--status-green); }
+    .badge-updated { border-color: var(--status-yellow); color: var(--status-yellow); }
+    .badge-deleted { border-color: var(--status-red); color: var(--status-red); }
+
+    .hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <div class="page-header-title">
+      <h1>History</h1>
+      <span class="page-subtitle">
+        All events for {{ .Username }}'s machines
+      </span>
+    </div>
+    <a href="/me/machines" class="btn">← Back to machines</a>
+  </div>
+
+  <div class="card">
+    {{ if not .History }}
+      <p class="page-subtitle">No history events yet.</p>
+    {{ else }}
+      <div class="hint">
+        Last {{ len .History }} events.
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Event</th>
+            <th>Machine</th>
+            <th>Service</th>
+            <th>Status</th>
+            <th>Resources</th>
+            <th>Access</th>
+            <th>Ports</th>
+            <th>Image</th>
+          </tr>
+        </thead>
+        <tbody>
+        {{ range .History }}
+          <tr>
+            <!-- .OccurredAt уже отформатирован в Go как "2006-01-02 15:04:05" -->
+            <td>{{ .OccurredAt }}</td>
+            <td>
+              {{ if eq .Event.EventType "created" }}
+                <span class="badge badge-created">created</span>
+              {{ else if eq .Event.EventType "updated" }}
+                <span class="badge badge-updated">updated</span>
+              {{ else if eq .Event.EventType "deleted" }}
+                <span class="badge badge-deleted">deleted</span>
+              {{ else }}
+                <span class="badge">{{ .Event.EventType }}</span>
+              {{ end }}
+            </td>
+            <td>{{ .Event.Name }}</td>
+            <td>{{ .Event.ServiceKind }}</td>
+            <td>{{ .Event.Status }}</td>
+            <td>{{ .Event.ResourcesPreset }}</td>
+            <td>{{ .Event.AccessScope }}</td>
+            <td>{{ .Event.ContainerPort }}/{{ .Event.ServicePort }}</td>
+            <td>{{ if .Event.Image }}{{ .Event.Image }}{{ end }}</td>
+          </tr>
+        {{ end }}
+        </tbody>
+      </table>
+    {{ end }}
+  </div>
+</body>
+</html>
+{{ end }}

@@ -86,7 +86,7 @@
     }
 
     .col-ip { width: 220px; }
-    .col-actions { width: 120px; }
+    .col-actions { width: 180px; }
 
     .tag {
       font-size: 11px;
@@ -207,6 +207,17 @@
       color: var(--text-muted);
       padding-top: 4px;
     }
+    
+    .btn-muted {
+      background-color: transparent;
+      color: var(--text-muted);
+      border-radius: 999px;
+      border: 1px solid var(--border-color);
+    }
+
+    .btn-muted:hover {
+      background-color: #1c1e23;
+    }
   </style>
 </head>
 <body>
@@ -215,7 +226,14 @@
       <h1>My machines</h1>
       <span class="page-subtitle">Services in your namespace</span>
     </div>
-    <a class="btn btn-primary" href="/me/machines/new">New machine</a>
+    <div>
+      <a class="btn btn-muted" href="/me/machines/history" style="margin-right: 8px;">
+        History
+      </a>
+      <a class="btn btn-primary" href="/me/machines/new">
+        New machine
+      </a>
+    </div>
   </div>
 
   <div class="card">
@@ -337,14 +355,14 @@
       }
 
       function updateRow(row, m) {
-        // status
+        
         const statusCell = row.querySelector('.machine-status');
         if (statusCell) {
           statusCell.innerHTML = '';
           statusCell.appendChild(renderStatusBadge(m.status));
         }
 
-        // ip
+        
         const ipCell = row.querySelector('.machine-ip');
         if (ipCell) {
           ipCell.innerHTML = '';
@@ -404,7 +422,6 @@
             updateRow(row, m);
           });
         } catch (e) {
-          // молча игнорим
         }
       }
 

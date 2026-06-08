@@ -412,3 +412,41 @@ func (h *MachineHandler) ShowEditForm(c *gin.Context) {
 
 	c.HTML(http.StatusOK, "machine_new.tmpl", data)
 }
+
+func (h *MachineHandler) ShowUserHistory(c *gin.Context) {
+	username := middleware.CurrentUsername(c)
+	if username == "" {
+		c.Redirect(http.StatusSeeOther, "/auth/login")
+		return
+	}
+
+	events, err := h.svc.ListUserHistory(c.Request.Context(), username)
+	if err != nil {
+		log.Printf("FAILED TO LIST USER HISTORY: %v", err)
+		c.String(http.StatusInternalServerError, "failed to load history")
+		return
+	}
+
+	type historyItem struct {
+		OccurredAt string
+		Event      model.UserMachineHistory
+	}
+
+	items := make([]historyItem, 0, len(events))
+	for _, e := range events {
+		items = append(items, historyItem{
+			OccurredAt: e.OccurredAt.Format("2006-01-02 15:04:05"),
+			Event:      e,
+		})
+	}
+
+	data := struct {
+		Username string
+		History  []historyItem
+	}{
+		Username: username,
+		History:  items,
+	}
+
+	c.HTML(http.StatusOK, "machines_history.tmpl", data)
+}

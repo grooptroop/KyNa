@@ -226,3 +226,159 @@ func (r *MachineRepository) UpdateImage(ctx context.Context, id int64, image str
 	}
 	return nil
 }
+
+func (r *MachineRepository) InsertHistory(ctx context.Context, m *model.UserMachine, eventType model.UserMachineEventType) error {
+	_, err := r.pool.Exec(ctx, `
+        INSERT INTO user_machines_history (
+            machine_id,
+            username,
+            name,
+            mode,
+            service_kind,
+            status,
+            external_ip,
+            cluster_ip,
+            ingress_host,
+            resources_preset,
+            access_scope,
+            container_port,
+            service_port,
+            image,
+            event_type
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+        )`,
+		m.ID,
+		m.Username,
+		m.Name,
+		m.Mode,
+		m.ServiceKind,
+		m.Status,
+		m.ExternalIP,
+		m.ClusterIP,
+		m.IngressHost,
+		m.ResourcesPreset,
+		m.AccessScope,
+		m.ContainerPort,
+		m.ServicePort,
+		m.Image,
+		eventType,
+	)
+	if err != nil {
+		return fmt.Errorf("insert user_machines_history: %w", err)
+	}
+	return nil
+}
+
+func (r *MachineRepository) GetByID(ctx context.Context, id int64, username string) (*model.UserMachine, error) {
+	row := r.pool.QueryRow(ctx, `
+        SELECT
+            id,
+            username,
+            name,
+            mode,
+            service_kind,
+            status,
+            external_ip,
+            cluster_ip,
+            ingress_host,
+            resources_preset,
+            access_scope,
+            container_port,
+            service_port,
+            image,
+            created_at,
+            updated_at
+        FROM user_machines
+        WHERE id = $1 AND username = $2
+    `,
+		id, username,
+	)
+
+	var m model.UserMachine
+	if err := row.Scan(
+		&m.ID,
+		&m.Username,
+		&m.Name,
+		&m.Mode,
+		&m.ServiceKind,
+		&m.Status,
+		&m.ExternalIP,
+		&m.ClusterIP,
+		&m.IngressHost,
+		&m.ResourcesPreset,
+		&m.AccessScope,
+		&m.ContainerPort,
+		&m.ServicePort,
+		&m.Image,
+		&m.CreatedAt,
+		&m.UpdatedAt,
+	); err != nil {
+		return nil, fmt.Errorf("get machine by id: %w", err)
+	}
+	return &m, nil
+}
+
+func (r *MachineRepository) ListHistoryByUsername(ctx context.Context, username string) ([]model.UserMachineHistory, error) {
+	rows, err := r.pool.Query(ctx, `
+        SELECT
+            h.id,
+            h.machine_id,
+            h.username,
+            h.name,
+            h.mode,
+            h.service_kind,
+            h.status,
+            h.external_ip,
+            h.cluster_ip,
+            h.ingress_host,
+            h.resources_preset,
+            h.access_scope,
+            h.container_port,
+            h.service_port,
+            h.image,
+            h.event_type,
+            h.occurred_at
+        FROM user_machines_history h
+        WHERE h.username = $1
+        ORDER BY h.occurred_at DESC
+        LIMIT 200
+    `,
+		username,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list history by username: %w", err)
+	}
+	defer rows.Close()
+
+	var hs []model.UserMachineHistory
+	for rows.Next() {
+		var h model.UserMachineHistory
+		if err := rows.Scan(
+			&h.ID,
+			&h.MachineID,
+			&h.Username,
+			&h.Name,
+			&h.Mode,
+			&h.ServiceKind,
+			&h.Status,
+			&h.ExternalIP,
+			&h.ClusterIP,
+			&h.IngressHost,
+			&h.ResourcesPreset,
+			&h.AccessScope,
+			&h.ContainerPort,
+			&h.ServicePort,
+			&h.Image,
+			&h.EventType,
+			&h.OccurredAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan history row: %w", err)
+		}
+		hs = append(hs, h)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("history rows err: %w", err)
+	}
+	return hs, nil
+}

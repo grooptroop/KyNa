@@ -16,7 +16,6 @@ func Register(
 	authHandler *handlers.AuthHandler,
 	sessions *service.SessionStore,
 ) {
-	// auth routes
 	r.GET("/auth/register", authHandler.ShowRegister)
 	r.POST("/auth/register", authHandler.Register)
 	r.GET("/auth/login", authHandler.ShowLogin)
@@ -25,7 +24,6 @@ func Register(
 
 	authRequired := middleware.AuthMiddleware(sessions, true)
 
-	// root → user machines
 	r.GET("/", func(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/me/machines")
 	})
@@ -52,6 +50,7 @@ func Register(
 
 		me.GET("/machines/:id/edit", machineHandler.ShowEditForm)
 		me.POST("/machines/:id", machineHandler.UpdateMachine)
+		me.GET("/machines/history", machineHandler.ShowUserHistory)
 	}
 
 }

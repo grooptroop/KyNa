@@ -164,6 +164,9 @@ func (s *MachineService) CreateMachine(ctx context.Context, in CreateMachineInpu
 		log.Printf("CREATE MACHINE DB ERROR: %v", err)
 		return nil, err
 	}
+	if err := s.repo.InsertHistory(ctx, m, model.UserMachineEventCreated); err != nil {
+		log.Printf("failed to insert machine history (created): %v", err)
+	}
 
 	log.Printf("DEBUG: Machine saved to DB id=%d username=%s name=%s serviceKind=%s resources=%s",
 		m.ID, m.Username, m.Name, m.ServiceKind, m.ResourcesPreset)
@@ -191,25 +194,32 @@ func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInpu
 		return fmt.Errorf("DeleteMachine: empty id and name")
 	}
 
-	name := in.Name
+	var m *model.UserMachine
 
-	if name == "" {
+	if in.ID != 0 {
+		var err error
+		m, err = s.repo.GetByID(ctx, in.ID, in.Username)
+		if err != nil {
+			return fmt.Errorf("get machine: %w", err)
+		}
+	} else {
 		machines, err := s.repo.ListByUsername(ctx, in.Username)
 		if err != nil {
 			return fmt.Errorf("list machines: %w", err)
 		}
-		var found *model.UserMachine
 		for i := range machines {
-			if machines[i].ID == in.ID {
-				found = &machines[i]
+			if machines[i].Name == in.Name {
+				m = &machines[i]
+				in.ID = m.ID
 				break
 			}
 		}
-		if found == nil {
+		if m == nil {
 			return fmt.Errorf("machine not found")
 		}
-		name = found.Name
 	}
+
+	name := m.Name
 
 	if s.helmChartDir != "" {
 		releaseName := fmt.Sprintf("machine-%s-%s", in.Username, name)
@@ -227,6 +237,10 @@ func (s *MachineService) DeleteMachine(ctx context.Context, in DeleteMachineInpu
 		if err != nil {
 			log.Printf("helm uninstall for machine failed: %v, output: %s", err, string(out))
 		}
+	}
+
+	if err := s.repo.InsertHistory(ctx, m, model.UserMachineEventDeleted); err != nil {
+		log.Printf("failed to insert machine history (deleted): %v", err)
 	}
 
 	if err := s.repo.DeleteByID(ctx, in.ID, in.Username); err != nil {
@@ -596,6 +610,9 @@ func (s *MachineService) UpdateMachine(ctx context.Context, in UpdateMachineInpu
 	if err := s.repo.UpdateMetadata(ctx, m); err != nil {
 		return fmt.Errorf("update metadata: %w", err)
 	}
+	if err := s.repo.InsertHistory(ctx, m, model.UserMachineEventUpdated); err != nil {
+		log.Printf("failed to insert machine history (updated): %v", err)
+	}
 
 	if s.helmChartDir == "" {
 		return nil
@@ -623,4 +640,8 @@ func (s *MachineService) UpdateMachine(ctx context.Context, in UpdateMachineInpu
 	}()
 
 	return nil
+}
+
+func (s *MachineService) ListUserHistory(ctx context.Context, username string) ([]model.UserMachineHistory, error) {
+	return s.repo.ListHistoryByUsername(ctx, username)
 }

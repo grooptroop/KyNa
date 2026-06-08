@@ -61,11 +61,39 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 `
 
+const createUserMachinesHistoryTable = `
+CREATE TABLE IF NOT EXISTS user_machines_history (
+    id              BIGSERIAL PRIMARY KEY,
+    machine_id      BIGINT, 
+    username        TEXT        NOT NULL,
+    name            TEXT        NOT NULL,
+    mode            TEXT        NOT NULL,
+    service_kind    TEXT        NOT NULL,
+    status          TEXT        NOT NULL,
+    external_ip     TEXT,
+    cluster_ip      TEXT,
+    ingress_host    TEXT,
+    resources_preset TEXT       NOT NULL,
+    access_scope    TEXT        NOT NULL,
+    container_port  INTEGER     NOT NULL,
+    service_port    INTEGER     NOT NULL,
+    image           TEXT,
+    event_type      TEXT        NOT NULL,
+    occurred_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_machines_history_machine
+  ON user_machines_history (machine_id, occurred_at DESC);
+`
+
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	if _, err := pool.Exec(ctx, createUserProvisionsTable); err != nil {
 		return err
 	}
 	if _, err := pool.Exec(ctx, createUserMachinesTable); err != nil {
+		return err
+	}
+	if _, err := pool.Exec(ctx, createUserMachinesHistoryTable); err != nil {
 		return err
 	}
 	if _, err := pool.Exec(ctx, createAccountsTable); err != nil {
